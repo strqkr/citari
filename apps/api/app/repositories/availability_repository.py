@@ -72,8 +72,12 @@ class AvailabilityRepository:
         location_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """GET /availability-blocks: paginated, with optional ?date/
-        ?locationId filters."""
-        conditions = ["tenant_id = ?"]
+        ?locationId filters.
+
+        `block_is_active = 1` excludes soft-deleted blocks (see `deactivate`) -
+        without it, DELETE /availability-blocks/{id} would not actually
+        remove the block from this listing."""
+        conditions = ["tenant_id = ?", "block_is_active = 1"]
         params: list[Any] = [tenant_id]
         if block_date is not None:
             conditions.append("block_date = ?")
