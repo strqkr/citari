@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+*.md
+# Env locales: NO deben entrar al build. Next los leeria y sobreescribiria los
+# build-args (NEXT_PUBLIC_*) de produccion con valores de desarrollo.
+.env.local
+.env*.local
+.pnpm-store
+Dockerfile
+.dockerignore
