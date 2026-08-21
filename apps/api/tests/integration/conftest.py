@@ -250,14 +250,11 @@ def cleanup_tracker(raw_conn) -> Generator[dict, None, None]:
     if block_ids:
         placeholders = ",".join("?" for _ in block_ids)
         cursor.execute(
-            "DELETE FROM availability_blocks "
-            f"WHERE availability_block_id IN ({placeholders})",
+            f"DELETE FROM availability_blocks WHERE availability_block_id IN ({placeholders})",
             block_ids,
         )
 
-    cursor.execute(
-        "SELECT customer_id FROM customer_emails WHERE email = ?", [TEST_CUSTOMER_EMAIL]
-    )
+    cursor.execute("SELECT customer_id FROM customer_emails WHERE email = ?", [TEST_CUSTOMER_EMAIL])
     test_customer_ids = [row.customer_id for row in cursor.fetchall()]
     if test_customer_ids:
         placeholders = ",".join("?" for _ in test_customer_ids)

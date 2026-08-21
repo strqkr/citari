@@ -43,7 +43,9 @@ class AvailabilityService:
         has an active (non-cancelled) reservation."""
         row = self._repo.get_by_id(tenant_id, block_id)
         if row is None:
-            raise NotFoundError(f"Availability block {block_id} not found or does not belong to the tenant.")
+            raise NotFoundError(
+                f"Availability block {block_id} not found or does not belong to the tenant."
+            )
         if row.get("is_reserved"):
             raise ConflictError(
                 f"Availability block {block_id} has an active booking and cannot be deleted."
