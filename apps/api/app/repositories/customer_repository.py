@@ -25,7 +25,7 @@ class CustomerRepository:
         notes: str | None,
     ) -> dict[str, Any]:
         """sp_create_customer's email parameter is `@email`, and the SP
-        reports the (possibly reused - see database/scripts/04-procedures.sql)
+        reports the (possibly reused - see database/scripts/citari.sql)
         id via `@customer_id OUTPUT` only, no final SELECT - so this goes
         through exec_sp_output and then re-reads the full row."""
         customer_id = exec_sp_output(
@@ -52,7 +52,7 @@ class CustomerRepository:
         aliased back onto the row AS email/AS phone so
         app.mappers.customer_mapper.map_customer's `row["email"]`/
         `row["phone"]` keep working unchanged. Same pattern as
-        database/scripts/06-views.sql's v_booking_details."""
+        database/scripts/citari.sql's v_booking_details."""
         sql = (
             "SELECT c.*, cco.email AS email, cte.phone AS phone "
             "FROM customers c "
@@ -176,7 +176,7 @@ class CustomerRepository:
         """Updates the canonical (first-registered, lowest
         customer_email_id) row in customer_emails if one exists, otherwise
         inserts a new one - mirrors the two-step INSERT pattern
-        sp_create_customer uses at creation time (04-procedures.sql)."""
+        sp_create_customer uses at creation time (database/scripts/citari.sql)."""
         cursor = self._conn.cursor()
         try:
             existing = cursor.execute(

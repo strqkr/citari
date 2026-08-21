@@ -123,29 +123,12 @@ jobs:
             sleep 3
           done
 
-      # Loads the full schema in numeric order: 01 (create db) + 02 (tables) +
-      # 03 (seed) + 04 (procedures) + 05 (functions) + 06 (views) + 07 (triggers).
-      # The integration tests call stored procedures/views, so 04-07 must run too
-      # (the original pipeline stopped at 03, which predated those scripts).
-      - name: Run schema + seed scripts (01-07, in order)
+      # -I turns on SET QUOTED_IDENTIFIER ON (required by the filtered index
+      # ux_bookings_availability_block; sqlcmd defaults it OFF).
+      - name: Run schema + seed script
         env:
           SA_PASSWORD: ${{ secrets.SQLSERVER_PASSWORD || 'YourStrong!Passw0rd' }}
-        run: |
-          for script in database/scripts/0[1-7]-*.sql; do
-            if [ -f "$script" ]; then
-              echo "Running $script"
-              /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -i "$script"
-            else
-              echo "Skipping $script (not found)"
-            fi
-          done
-
-      # check-all.sql lives in the repo-root scripts/ directory, not database/scripts/.
-      - name: Run database consistency checks (check-all.sql)
-        if: hashFiles('scripts/check-all.sql') != ''
-        env:
-          SA_PASSWORD: ${{ secrets.SQLSERVER_PASSWORD || 'YourStrong!Passw0rd' }}
-        run: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -i scripts/check-all.sql
+        run: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -I -i database/scripts/citari.sql
 
       - name: Set up Python
         uses: actions/setup-python@v5

@@ -54,24 +54,14 @@ do {
 } until ($status -eq "healthy")
 Write-Host "[setup] SQL Server is healthy."
 
-# ── 4. Run scripts in order ─────────────────────────────────────────────────
-function Run-Script($fileName) {
-    Write-Host "[setup] Running $fileName..."
-    # -I: QUOTED_IDENTIFIER ON (required by the FILTERED unique index
-    # ux_bookings_availability_block in 02-create-tables.sql; sqlcmd
-    # defaults it OFF, and CREATE INDEX on a filtered index fails without it).
-    docker exec -i $CONTAINER `
-        $SQLCMD -S localhost -U sa -P "$SA_PASSWORD" -C -I `
-        -i "/scripts/$fileName"
-}
-
-Run-Script "01-create-database.sql"
-Run-Script "02-create-tables.sql"
-Run-Script "03-seed-data.sql"
-Run-Script "04-procedures.sql"
-Run-Script "05-functions.sql"
-Run-Script "06-views.sql"
-Run-Script "07-triggers.sql"
+# ── 4. Run the script ────────────────────────────────────────────────────────
+Write-Host "[setup] Running database/scripts/citari.sql..."
+# -I: QUOTED_IDENTIFIER ON (required by the FILTERED unique index
+# ux_bookings_availability_block; sqlcmd defaults it OFF, and CREATE INDEX
+# on a filtered index fails without it).
+docker exec -i $CONTAINER `
+    $SQLCMD -S localhost -U sa -P "$SA_PASSWORD" -C -I `
+    -i "/scripts/citari.sql"
 
 # ── 5. Done ──────────────────────────────────────────────────────────────────
 Write-Host ""

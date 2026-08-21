@@ -1,7 +1,6 @@
 """Shared fixtures for the integration suite: real SQL Server (the live
 `db` container / `citari` database, seed already loaded - see
-docs/sql-signatures.md and scripts/smoke-db.sql for the conventions this
-mirrors).
+docs/sql-signatures.md for the conventions this mirrors).
 
 Every test creates its own throwaway data (year-2032 availability blocks, one
 fixed test-customer email) and the `cleanup_tracker` fixture removes it again
@@ -63,7 +62,7 @@ def client() -> TestClient:
 
 # Every seed owner shares the same bcrypt hash of "bowner123", and
 # every seed superadmin shares the same bcrypt hash of "Admin123" - see
-# database/docs/PASSWORDS.md.
+# database/PASSWORDS.md.
 SEED_OWNER_PASSWORD = "bowner123"
 SEED_SUPERADMIN_PASSWORD = "Admin123"
 
@@ -170,8 +169,7 @@ def owner_auth_headers(client: TestClient, *, email: str, password: str) -> dict
 @pytest.fixture(scope="session")
 def seed_tenant(db_factory: ConnectionFactory) -> dict:
     """Finds one active tenant from the seed with at least one active service
-    and one active location - the same lookup pattern scripts/smoke-db.sql
-    uses."""
+    and one active location."""
     conn = db_factory.new_connection()
     try:
         cursor = conn.cursor()

@@ -1,4 +1,4 @@
-﻿-- 08-full-script.sql
+﻿-- citari.sql
 -- Project: Citari
 -- Single script that rebuilds the entire database from scratch, in order:
 -- database creation, the 24 tables and their relationships, seed data,

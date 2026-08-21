@@ -49,7 +49,7 @@ class TenantOwnerRepository:
     def get_by_email(self, email: str) -> dict[str, Any] | None:
         """`email` doesn't live on `tenant_owners` directly - it's
         normalized into the 1:N child table `owner_emails`
-        (see database/scripts/06-views.sql's OUTER APPLY pattern, reused
+        (see database/scripts/citari.sql's OUTER APPLY pattern, reused
         here) - so the email lookup itself must JOIN against that child
         table instead of filtering
         `tenant_owners.email` directly. `dc.email` is re-selected AS
@@ -69,7 +69,7 @@ class TenantOwnerRepository:
     def get_by_id(self, owner_id: int) -> dict[str, Any] | None:
         """`email` doesn't live on `tenant_owners` - it's resolved
         from `owner_emails` (1:N) the same way
-        database/scripts/06-views.sql resolves `customer_emails` for
+        database/scripts/citari.sql resolves `customer_emails` for
         v_booking_details: take the first-registered row as the
         canonical email. Aliased AS `email` so the row shape
         app.mappers.user_mapper.map_owner_user expects (`row["email"]`)
