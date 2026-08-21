@@ -42,13 +42,13 @@ class LocationRepository:
         phone: str | None,
         is_main: bool,
     ) -> dict[str, Any]:
-        """The is-main-location column is `is_main` (see database/scripts/02-create-tables.sql).
+        """The is-main-location column is `is_main` (see database/scripts/citari.sql).
 
         `locations` has no address/phone columns directly - the
         territorial division lives in the `addresses` catalog
         (address_id FK) and the phone in the 1:N `location_phones`
         table. Mirrors the insert-parent/get-id/insert-children pattern used
-        by sp_create_owner/sp_create_customer in database/scripts/04-procedures.sql,
+        by sp_create_owner/sp_create_customer in database/scripts/citari.sql,
         translated to pyodbc since no stored procedure exists for this table.
         """
         try:

@@ -43,25 +43,14 @@ until docker inspect --format='{{.State.Health.Status}}' "$CONTAINER" 2>/dev/nul
 done
 echo "[setup] SQL Server is healthy."
 
-# ── 4. Run scripts in order ─────────────────────────────────────────────────
-run_script() {
-    local file="$1"
-    echo "[setup] Running $file..."
-    # -I: QUOTED_IDENTIFIER ON (required by the FILTERED unique index
-    # ux_bookings_availability_block in 02-create-tables.sql; sqlcmd
-    # defaults it OFF, and CREATE INDEX on a filtered index fails without it).
-    docker exec -i "$CONTAINER" \
-        "$SQLCMD" -S localhost -U sa -P "$SQLSERVER_PASSWORD" -C -I \
-        -i "/scripts/$(basename "$file")"
-}
-
-run_script "database/scripts/01-create-database.sql"
-run_script "database/scripts/02-create-tables.sql"
-run_script "database/scripts/03-seed-data.sql"
-run_script "database/scripts/04-procedures.sql"
-run_script "database/scripts/05-functions.sql"
-run_script "database/scripts/06-views.sql"
-run_script "database/scripts/07-triggers.sql"
+# ── 4. Run the script ────────────────────────────────────────────────────────
+echo "[setup] Running database/scripts/citari.sql..."
+# -I: QUOTED_IDENTIFIER ON (required by the FILTERED unique index
+# ux_bookings_availability_block; sqlcmd defaults it OFF, and CREATE INDEX
+# on a filtered index fails without it).
+docker exec -i "$CONTAINER" \
+    "$SQLCMD" -S localhost -U sa -P "$SQLSERVER_PASSWORD" -C -I \
+    -i "/scripts/citari.sql"
 
 # ── 5. Done ──────────────────────────────────────────────────────────────────
 echo ""

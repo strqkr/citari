@@ -27,7 +27,7 @@ class AvailabilityRepository:
         `@block_date` / `@start_time` / `@end_time` (the latter two
         full DATETIME2, combining block_date with start/end_time), and it
         reports the new id via `@availability_block_id OUTPUT` - see
-        database/scripts/04-procedures.sql, hence exec_sp_output rather than
+        database/scripts/citari.sql, hence exec_sp_output rather than
         exec_sp. Used by /public and /track only indirectly, as the fixture
         that creates availability blocks for the integration tests.
         """

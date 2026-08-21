@@ -18,7 +18,7 @@ type Location = { locationId: number; name: string };
 type HoursApiRow = { dayOfWeek: number; openTime: string | null; closeTime: string | null; isClosed: boolean };
 type DayRow = { dow: number; label: string; isClosed: boolean; openTime: string; closeTime: string };
 
-// dia_semana per db/03-seed-data.sql: 0=Domingo .. 6=Sabado (JS getDay convention).
+// day_of_week: 0=Sunday .. 6=Saturday (JS getDay convention).
 const WEEK: { label: string; dow: number }[] = [
   { label: "Lunes", dow: 1 },
   { label: "Martes", dow: 2 },

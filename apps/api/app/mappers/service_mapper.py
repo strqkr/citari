@@ -24,7 +24,7 @@ def map_service_category(row: dict[str, Any]) -> dict[str, Any]:
     """Row from `service_categories` -> ServiceCategory-shaped dict.
 
     The PK/active-flag columns are `category_id`/`is_active` (see
-    database/scripts/02-create-tables.sql).
+    database/scripts/citari.sql).
     """
     return {
         "category_id": row["category_id"],

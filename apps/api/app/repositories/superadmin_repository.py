@@ -18,7 +18,7 @@ class SuperadminRepository:
 
         `email` doesn't live on `superadmins` directly - it's normalized
         into the 1:N child table `superadmin_emails` (see
-        database/scripts/06-views.sql's OUTER APPLY pattern, reused here) -
+        database/scripts/citari.sql's OUTER APPLY pattern, reused here) -
         so the email lookup itself must JOIN against that child table
         instead of filtering `superadmins.email` directly. `sc.email` is
         re-selected AS `email` so the row shape app.mappers.user_mapper.
@@ -34,7 +34,7 @@ class SuperadminRepository:
     def get_by_id(self, superadmin_id: int) -> dict[str, Any] | None:
         """`email` doesn't live on `superadmins` - it's resolved from
         `superadmin_emails` (1:N) the same way
-        database/scripts/06-views.sql resolves `customer_emails`
+        database/scripts/citari.sql resolves `customer_emails`
         for v_booking_details: take the first-registered row as the
         canonical email. Aliased AS `email` so the row shape app.mappers.
         user_mapper.map_superadmin_user expects (`row["email"]`) still

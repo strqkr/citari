@@ -1,11 +1,10 @@
 # SQL signatures - compact reference (Citari)
 
 Quick reference for anyone implementing the API on top of the stored
-procedures, views, functions and triggers of the English schema in
-`database/scripts/`, without having to re-read the raw `.sql` files. Source
-of truth: `database/scripts/04-procedures.sql` (procedures), `05-functions.sql`
-(functions), `06-views.sql` (views), `07-triggers.sql` (triggers). Table and
-column names: see `database/scripts/02-create-tables.sql`.
+procedures, views, functions and triggers of the English schema, without
+having to re-read the raw SQL. Source of truth for everything below -
+procedures, functions, views, triggers, and every table/column name:
+`database/scripts/citari.sql`.
 
 ## 1. Stored procedures
 
@@ -22,7 +21,7 @@ Parameters with a `= NULL`/default value in the signature are optional.
 | 6 | `sp_update_service` | `@service_id INT`, `@tenant_id INT`, `@category_id INT = NULL`, `@name NVARCHAR(200) = NULL`, `@description NVARCHAR(MAX) = NULL`, `@duration_minutes INT = NULL`, `@price DECIMAL(10,2) = NULL`, `@show_price BIT = NULL`, `@is_active BIT = NULL` (COALESCE pattern: NULL = no change) | 50024 (404), 50023 (404) |
 | 7 | `sp_create_availability_block` | `@tenant_id INT`, `@location_id INT`, `@block_date DATE`, `@start_time DATETIME2`, `@end_time DATETIME2`, `@availability_block_id INT OUTPUT` | 50021 (404), 50025 (404), 50004 (400), 50041 (409) |
 | 8 | `sp_create_customer` | `@tenant_id INT`, `@first_name NVARCHAR(100)`, `@last_name_1 NVARCHAR(100)`, `@last_name_2 NVARCHAR(100) = NULL`, `@email NVARCHAR(254)`, `@phone NVARCHAR(30)`, `@notes NVARCHAR(500) = NULL`, `@customer_id INT OUTPUT` (reuses an existing customer by `tenant_id`+`email`) | 50021 (404) |
-| 9 | `sp_create_booking` | `@tenant_id INT`, `@service_id INT`, `@location_id INT`, `@availability_block_id INT`, `@customer_id INT = NULL`, `@customer_first_name NVARCHAR(100) = NULL`, `@customer_last_name_1 NVARCHAR(100) = NULL`, `@customer_last_name_2 NVARCHAR(100) = NULL`, `@customer_email NVARCHAR(254) = NULL`, `@customer_phone NVARCHAR(30) = NULL`, `@customer_notes_field NVARCHAR(500) = NULL`, `@customer_notes NVARCHAR(500) = NULL`, `@booking_id INT OUTPUT`. Transactional, uses UPDLOCK+HOLDLOCK on the availability block. Does not insert into `tracking_codes`/`audit_logs` (triggers 1 and 2 of `07-triggers.sql` do that). | 50005 (400), 50021 (404), 50001 (400), 50024 (404), 50025 (404), 50027 (404), 50026 (404), 50040 (409) |
+| 9 | `sp_create_booking` | `@tenant_id INT`, `@service_id INT`, `@location_id INT`, `@availability_block_id INT`, `@customer_id INT = NULL`, `@customer_first_name NVARCHAR(100) = NULL`, `@customer_last_name_1 NVARCHAR(100) = NULL`, `@customer_last_name_2 NVARCHAR(100) = NULL`, `@customer_email NVARCHAR(254) = NULL`, `@customer_phone NVARCHAR(30) = NULL`, `@customer_notes_field NVARCHAR(500) = NULL`, `@customer_notes NVARCHAR(500) = NULL`, `@booking_id INT OUTPUT`. Transactional, uses UPDLOCK+HOLDLOCK on the availability block. Does not insert into `tracking_codes`/`audit_logs` (the tr_bookings_generate_tracking and tr_bookings_audit_insert triggers do that). | 50005 (400), 50021 (404), 50001 (400), 50024 (404), 50025 (404), 50027 (404), 50026 (404), 50040 (409) |
 | 10 | `sp_confirm_booking` | `@booking_id INT`, `@tenant_id INT` | 50028 (404), 50003 (400) |
 | 11 | `sp_cancel_booking` | `@booking_id INT`, `@tenant_id INT = NULL` (optional: supports the public flow by tracking code, without a tenant session). Does not release the block (trigger 7, branch a, does that). | 50028 (404), 50003 (400) |
 | 12 | `sp_reschedule_booking` | `@booking_id INT`, `@tenant_id INT`, `@new_availability_block_id INT`. Same pessimistic locking as `sp_create_booking`. Does not reactivate the previous block (trigger 7, branch b, does that). | 50028 (404), 50003 (400), 50026 (404), 50042 (409) |
@@ -61,7 +60,7 @@ All read-only, `CREATE OR ALTER VIEW`, each referencing 2+ base tables
 ## 4. Triggers and automatic side effects
 
 All on the English schema, `CREATE OR ALTER TRIGGER`, defined in
-`database/scripts/07-triggers.sql`. The API **must not duplicate** this
+`database/scripts/citari.sql`. The API **must not duplicate** this
 logic (must not manually insert into `tracking_codes`/`audit_logs`, nor
 reactivate blocks): these triggers already do it within the same
 transaction as the INSERT/UPDATE on `bookings`/`tenants`/`services`.
