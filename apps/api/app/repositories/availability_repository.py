@@ -96,8 +96,7 @@ class AvailabilityRepository:
         total = int(total_rows[0]["total"]) if total_rows else 0
 
         sql = (
-            self._OWNER_SELECT
-            + f" WHERE {where} ORDER BY block_date, start_time, block_id "
+            self._OWNER_SELECT + f" WHERE {where} ORDER BY block_date, start_time, block_id "
             "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
         )
         rows = query_view(
