@@ -51,9 +51,7 @@ def crud_cleanup(raw_conn) -> Generator[None, None, None]:
         [f"%{TEST_MARK}%"],
     )
     cursor.execute("DELETE FROM locations WHERE name LIKE ?", [f"%{TEST_MARK}%"])
-    cursor.execute(
-        "SELECT customer_id FROM customer_emails WHERE email = ?", [TEST_CUSTOMER_EMAIL]
-    )
+    cursor.execute("SELECT customer_id FROM customer_emails WHERE email = ?", [TEST_CUSTOMER_EMAIL])
     test_customer_ids = [row.customer_id for row in cursor.fetchall()]
     if test_customer_ids:
         customer_placeholders = ",".join("?" for _ in test_customer_ids)
