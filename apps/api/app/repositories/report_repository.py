@@ -56,10 +56,7 @@ class ReportRepository:
         return rows, total
 
     def services_demand(self, tenant_id: int) -> list[dict[str, Any]]:
-        sql = (
-            "SELECT * FROM v_service_demand WHERE tenant_id = ? "
-            "ORDER BY total_bookings DESC"
-        )
+        sql = "SELECT * FROM v_service_demand WHERE tenant_id = ? ORDER BY total_bookings DESC"
         return query_view(self._conn, sql, [tenant_id], label="v_service_demand")
 
     def availability_status(self, tenant_id: int, status_date: date) -> list[dict[str, Any]]:
@@ -68,6 +65,4 @@ class ReportRepository:
             "SELECT * FROM v_availability_status WHERE tenant_id = ? AND block_date = ? "
             "ORDER BY start_time"
         )
-        return query_view(
-            self._conn, sql, [tenant_id, status_date], label="v_availability_status"
-        )
+        return query_view(self._conn, sql, [tenant_id, status_date], label="v_availability_status")

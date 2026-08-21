@@ -21,5 +21,7 @@ class BusinessHoursService:
         no SP to enforce it) before replacing its weekly set."""
         location = self._location_repo.get_by_id(tenant_id, location_id)
         if location is None:
-            raise NotFoundError(f"Location {location_id} not found or does not belong to the tenant.")
+            raise NotFoundError(
+                f"Location {location_id} not found or does not belong to the tenant."
+            )
         return self._repo.replace_week(tenant_id, location_id, hours)
