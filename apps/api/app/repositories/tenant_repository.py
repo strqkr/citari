@@ -65,7 +65,7 @@ class TenantRepository:
         OUTER APPLY that takes the first-registered child row (ORDER BY the
         child table's own identity column ascending) as canonical, aliased
         back onto the row AS email/AS phone, same pattern as
-        database/scripts/06-views.sql."""
+        database/scripts/citari.sql."""
         sql = (
             "SELECT d.*, ed.name AS status_name, "
             "dco.email AS email, dte.phone AS phone "
@@ -255,7 +255,7 @@ class TenantRepository:
         """Updates the canonical (first-registered, lowest
         tenant_email_id) row in tenant_emails if one exists, otherwise
         inserts a new one - mirrors the two-step INSERT pattern
-        sp_create_tenant uses at creation time (04-procedures.sql)."""
+        sp_create_tenant uses at creation time (database/scripts/citari.sql)."""
         cursor = self._conn.cursor()
         started = time.perf_counter()
         try:

@@ -63,9 +63,9 @@ the container is not enough).
 
 ## Database
 
-The schema and seed scripts are in [`database/scripts/`](../database/scripts)
-(`01`…`07`, in order; `08-full-script.sql` concatenates them). In production
-they run once against the SQL Server instance; the homelab decides whether to
+The schema and seed data live in a single script,
+[`database/scripts/citari.sql`](../database/scripts/citari.sql). In production
+it runs once against the SQL Server instance; the homelab decides whether to
 use a SQL Server container, a persistent volume, or a managed instance. The
 app does not create the schema on its own.
 

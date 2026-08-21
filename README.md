@@ -22,7 +22,7 @@ setup for the full booking, administration, and tracking flow.
 
 **Other:**
 
-- [database/docs/PASSWORDS.md](database/docs/PASSWORDS.md) development credentials (seed data)
+- [database/PASSWORDS.md](database/PASSWORDS.md) development credentials (seed data)
 
 ## Quick structure
 
@@ -44,9 +44,9 @@ docker compose up --build
 ```
 
 Compose ships with development defaults, so no prior configuration is
-needed. The first time, an init service runs `database/scripts/01` through
-`07` in order (schema, seed, procedures, functions, views, and triggers);
-later boots detect the database already exists and skip it.
+needed. The first time, an init service runs `database/scripts/citari.sql`
+(schema, seed, procedures, functions, views, and triggers); later boots
+detect the database already exists and skip it.
 
 To stop or restart:
 
@@ -80,7 +80,7 @@ bash scripts/setup-db.sh   # macOS / Linux
 ### Demo credentials
 
 Passwords aren't documented in plain text in this README. See
-[database/docs/PASSWORDS.md](database/docs/PASSWORDS.md) for the full seed
+[database/PASSWORDS.md](database/PASSWORDS.md) for the full seed
 data details (business owners, superadmins, and the recommended demo owner:
 the `copper-blade-barbershop` tenant).
 
@@ -113,6 +113,11 @@ locally: [docs/deployment.md](docs/deployment.md).
 
 ## Data model: overview
 
+All email/phone columns are 1NF-normalized into their own per-entity tables
+(a superadmin, tenant, owner, customer, or location can have more than one),
+and a location's territorial division is a separate reusable `addresses`
+catalog. See `database/scripts/citari.sql` for the full DDL.
+
 ```mermaid
 erDiagram
     business_types {
@@ -126,16 +131,27 @@ erDiagram
         nvarchar_50 name "NOT NULL UNIQUE"
         nvarchar_200 description "NULL"
     }
+    addresses {
+        int address_id PK
+        nvarchar_100 province "NOT NULL"
+        nvarchar_100 canton "NOT NULL"
+        nvarchar_100 district "NOT NULL"
+        nvarchar_10 postal_code "NOT NULL"
+    }
     superadmins {
         int superadmin_id PK
         nvarchar_100 first_name "NOT NULL"
         nvarchar_100 last_name_1 "NOT NULL"
         nvarchar_100 last_name_2 "NULL"
-        nvarchar_254 email "NOT NULL UNIQUE"
         nvarchar_512 password_hash "NOT NULL"
         bit is_active "NOT NULL DEFAULT 1"
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
         datetime2 updated_at "NOT NULL DEFAULT SYSUTCDATETIME"
+    }
+    superadmin_emails {
+        int superadmin_email_id PK
+        int superadmin_id FK "NOT NULL"
+        nvarchar_254 email "NOT NULL UNIQUE"
     }
     tenants {
         int tenant_id PK
@@ -143,8 +159,6 @@ erDiagram
         int tenant_status_id FK "NOT NULL"
         nvarchar_200 name "NOT NULL"
         nvarchar_100 slug "NOT NULL UNIQUE"
-        nvarchar_254 email "NOT NULL"
-        nvarchar_30 phone "NULL"
         nvarchar_max description "NULL"
         nvarchar_500 logo_url "NULL"
         nvarchar_500 public_message "NULL"
@@ -152,18 +166,36 @@ erDiagram
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
         datetime2 updated_at "NOT NULL DEFAULT SYSUTCDATETIME"
     }
+    tenant_emails {
+        int tenant_email_id PK
+        int tenant_id FK "NOT NULL"
+        nvarchar_254 email "NOT NULL"
+    }
+    tenant_phones {
+        int tenant_phone_id PK
+        int tenant_id FK "NOT NULL"
+        nvarchar_30 phone "NOT NULL"
+    }
     tenant_owners {
         int owner_id PK
         int tenant_id FK "NOT NULL"
         nvarchar_100 first_name "NOT NULL"
         nvarchar_100 last_name_1 "NOT NULL"
         nvarchar_100 last_name_2 "NULL"
-        nvarchar_254 email "NOT NULL"
         nvarchar_512 password_hash "NOT NULL"
-        nvarchar_30 phone "NULL"
         bit is_active "NOT NULL DEFAULT 1"
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
         datetime2 updated_at "NOT NULL DEFAULT SYSUTCDATETIME"
+    }
+    owner_emails {
+        int owner_email_id PK
+        int owner_id FK "NOT NULL"
+        nvarchar_254 email "NOT NULL"
+    }
+    owner_phones {
+        int owner_phone_id PK
+        int owner_id FK "NOT NULL"
+        nvarchar_30 phone "NOT NULL"
     }
     customers {
         int customer_id PK
@@ -171,11 +203,19 @@ erDiagram
         nvarchar_100 first_name "NOT NULL"
         nvarchar_100 last_name_1 "NOT NULL"
         nvarchar_100 last_name_2 "NULL"
-        nvarchar_254 email "NOT NULL"
-        nvarchar_30 phone "NOT NULL"
         nvarchar_500 notes "NULL"
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
         datetime2 updated_at "NOT NULL DEFAULT SYSUTCDATETIME"
+    }
+    customer_emails {
+        int customer_email_id PK
+        int customer_id FK "NOT NULL"
+        nvarchar_254 email "NOT NULL"
+    }
+    customer_phones {
+        int customer_phone_id PK
+        int customer_id FK "NOT NULL"
+        nvarchar_30 phone "NOT NULL"
     }
     service_categories {
         int category_id PK
@@ -202,13 +242,17 @@ erDiagram
     locations {
         int location_id PK
         int tenant_id FK "NOT NULL"
+        int address_id FK "NOT NULL"
         nvarchar_200 name "NOT NULL"
-        nvarchar_500 address "NOT NULL"
-        nvarchar_30 phone "NULL"
         bit is_main "NOT NULL DEFAULT 0"
         bit is_active "NOT NULL DEFAULT 1"
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
         datetime2 updated_at "NOT NULL DEFAULT SYSUTCDATETIME"
+    }
+    location_phones {
+        int location_phone_id PK
+        int location_id FK "NOT NULL"
+        nvarchar_30 phone "NOT NULL"
     }
     business_hours {
         int business_hour_id PK
@@ -272,13 +316,22 @@ erDiagram
         datetime2 created_at "NOT NULL DEFAULT SYSUTCDATETIME"
     }
 
+    superadmins ||--o{ superadmin_emails : "has"
     business_types ||--o{ tenants : "classifies"
     tenant_statuses ||--o{ tenants : "has status"
+    tenants ||--o{ tenant_emails : "has"
+    tenants ||--o{ tenant_phones : "has"
     tenants ||--o{ tenant_owners : "has"
+    tenant_owners ||--o{ owner_emails : "has"
+    tenant_owners ||--o{ owner_phones : "has"
     tenants ||--o{ customers : "registers"
+    customers ||--o{ customer_emails : "has"
+    customers ||--o{ customer_phones : "has"
     tenants ||--o{ service_categories : "defines"
     tenants ||--o{ services : "offers"
     tenants ||--o{ locations : "operates at"
+    addresses ||--o{ locations : "locates"
+    locations ||--o{ location_phones : "has"
     tenants ||--o{ business_hours : "sets hours"
     tenants ||--o{ availability_blocks : "creates blocks"
     tenants ||--o{ bookings : "receives bookings"

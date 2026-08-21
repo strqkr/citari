@@ -291,7 +291,7 @@ Error`.
 ## curl examples
 
 All tested against the real API (`citari-api:dev`, local `docker
-compose`) with the seed data from `database/docs/PASSWORDS.md`. Replace
+compose`) with the seed data from `database/PASSWORDS.md`. Replace
 `http://localhost:8000` with the real environment URL.
 
 ### Owner login

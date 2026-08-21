@@ -10,7 +10,7 @@ Costa Rican naming convention (two surnames): first_name + last_name_1
               = f"{last_name_1} {last_name_2}"      otherwise
 
 The `customers` email column is `email` (customer_emails, 1:N - see
-database/scripts/02-create-tables.sql).
+database/scripts/citari.sql).
 """
 
 from __future__ import annotations

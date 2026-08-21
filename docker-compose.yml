@@ -26,9 +26,9 @@ services:
     networks:
       - citari_network
 
-  # Loads the schema and seed data (once). Runs 01-07 in order if the
-  # database doesn't exist yet; does nothing if it's already loaded. Reuses
-  # the SQL Server image (already ships sqlcmd), so nothing extra is pulled.
+  # Loads the schema and seed data (once), if the database doesn't exist
+  # yet; does nothing if it's already loaded. Reuses the SQL Server image
+  # (already ships sqlcmd), so nothing extra is pulled.
   db-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
@@ -52,12 +52,10 @@ services:
           echo "Database already initialized; skipping load."
           exit 0
         fi
-        for f in /scripts/01-*.sql /scripts/02-*.sql /scripts/03-*.sql /scripts/04-*.sql /scripts/05-*.sql /scripts/06-*.sql /scripts/07-*.sql; do
-          echo "Running $$f"
-          # -I turns on SET QUOTED_IDENTIFIER ON (required by the filtered
-          # index ux_bookings_availability_block; sqlcmd defaults it OFF).
-          /opt/mssql-tools18/bin/sqlcmd -S db -U sa -P "$$SA_PASSWORD" -C -b -I -i "$$f"
-        done
+        echo "Running /scripts/citari.sql"
+        # -I turns on SET QUOTED_IDENTIFIER ON (required by the filtered
+        # index ux_bookings_availability_block; sqlcmd defaults it OFF).
+        /opt/mssql-tools18/bin/sqlcmd -S db -U sa -P "$$SA_PASSWORD" -C -b -I -i /scripts/citari.sql
         echo "Database initialized (24 tables + seed + procedures/functions/views/triggers)."
     restart: "no"
     networks:

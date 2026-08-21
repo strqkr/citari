@@ -9,7 +9,7 @@ from app.db import exec_sp, exec_sp_output, query_view
 # Shared SELECT for the owner-facing flows (/bookings, /reports/*):
 # aliases v_booking_details' own columns (it already exposes
 # tracking_code via its own LEFT JOIN onto tracking_codes - see
-# database/scripts/06-views.sql - so no re-join is needed here, unlike
+# database/scripts/citari.sql - so no re-join is needed here, unlike
 # _DETAIL_SELECT below) into the same intermediate row shape
 # app.mappers.booking_mapper.map_booking_detail expects. Reused by
 # get_by_id/list_by_tenant here and by app.repositories.report_repository's
@@ -72,7 +72,7 @@ class BookingRepository:
 
     # -- /bookings, owner-authenticated --------------------------------------
     # Not called by public.py/track.py. sp_create_booking's real signature
-    # (database/scripts/04-procedures.sql) takes customer_id (existing
+    # (database/scripts/citari.sql) takes customer_id (existing
     # customer) OR the customer_first_name/customer_last_name_1/
     # customer_last_name_2/customer_email/customer_phone/customer_notes_field
     # branch (new customer, delegated internally to sp_create_customer),
