@@ -2,8 +2,8 @@
 
 Citari's frontend (App Router, React Server Components). Wired to the real
 `apps/api` API (auth, full back-office, availability, public
-booking/tracking flow). See [docs/frontend-map.md](../../docs/frontend-map.md)
-for the route <-> endpoint map.
+booking/tracking flow). See [docs/api-handover.md](../../docs/api-handover.md)
+for the full endpoint reference.
 
 ## Getting started (recommended: Docker)
 
