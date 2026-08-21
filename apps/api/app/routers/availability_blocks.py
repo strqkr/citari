@@ -25,7 +25,9 @@ def _service(db: DbConnection) -> AvailabilityService:
 def _require(service: AvailabilityService, tenant_id: int, block_id: int) -> dict:
     row = service.get(tenant_id, block_id)
     if row is None:
-        raise NotFoundError(f"Availability block {block_id} not found or does not belong to the tenant.")
+        raise NotFoundError(
+            f"Availability block {block_id} not found or does not belong to the tenant."
+        )
     return row
 
 

@@ -31,8 +31,7 @@ def foreign_resources(db_factory, seed_owner_module: dict) -> dict:
             "customer_id": "SELECT TOP 1 customer_id FROM customers WHERE tenant_id <> ?",
             "booking_id": "SELECT TOP 1 booking_id FROM bookings WHERE tenant_id <> ?",
             "block_id": (
-                "SELECT TOP 1 availability_block_id FROM availability_blocks "
-                "WHERE tenant_id <> ?"
+                "SELECT TOP 1 availability_block_id FROM availability_blocks WHERE tenant_id <> ?"
             ),
             "category_id": (
                 "SELECT TOP 1 category_id FROM service_categories WHERE tenant_id <> ?"
