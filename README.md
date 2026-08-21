@@ -16,18 +16,8 @@ setup for the full booking, administration, and tracking flow.
 
 ## Documentation
 
-**Database:**
-
-- [docs/overview.md](docs/overview.md) overview, goals, scope, actors, and requirements
-- [docs/database-and-sql-implementado.md](docs/database-and-sql-implementado.md) **built** (as-built) database: 24 tables, ER diagram, lifecycle, seed data, and an inventory of procedures/views/functions/triggers
-- [docs/sql-signatures.md](docs/sql-signatures.md) reference for stored procedures, views, functions, triggers, and THROW codes
-- [docs/domain-questions.md](docs/domain-questions.md) domain decisions that guided the design
-
-**Application (API + frontend):**
-
 - [docs/api-handover.md](docs/api-handover.md) API handover: conventions, full endpoint table, curl examples, statuses
-- [docs/arquitectura-visual.md](docs/arquitectura-visual.md) visual architecture, ports, JWT login sequence, and bootstrap
-- [docs/frontend-map.md](docs/frontend-map.md) frontend route map and how it relates to endpoints
+- [docs/sql-signatures.md](docs/sql-signatures.md) reference for stored procedures, views, functions, triggers, and THROW codes
 - [docs/deployment.md](docs/deployment.md) production deployment: Docker images, GHCR publishing, and required configuration
 
 **Other:**

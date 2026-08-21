@@ -8,13 +8,11 @@ Citari: multi-tenant booking platform for service businesses.
 Three parts, one repo: SQL Server database (source of truth for business logic),
 a FastAPI backend, and a Next.js frontend, wired together by Docker Compose.
 
-Docs live in `docs/`; the most load-bearing ones are `docs/arquitectura-visual.md`
-(how the pieces connect, JWT flow, diagrams) and `docs/api-handover.md` (full
-endpoint table, conventions, curl examples). `docs/database-and-sql-implementado.md`
-plus `docs/sql-signatures.md` document the as-built schema and every stored
-procedure/view/function/trigger signature. The frontend's user-facing UI text
-is in Spanish (the product's market); everything else — schema, code, docs — is
-in English.
+Docs live in `docs/`: `docs/api-handover.md` (full endpoint table, conventions,
+curl examples), `docs/sql-signatures.md` (every stored procedure/view/
+function/trigger signature and `THROW` error code), and `docs/deployment.md`
+(production deployment). The frontend's user-facing UI text is in Spanish
+(the product's market); everything else — schema, code, docs — is in English.
 
 ## Commands
 
@@ -39,7 +37,6 @@ make up               # docker compose up (db + api only) + waits for /ready
 make down
 make test-unit        # apps/api/tests/unit, no DB needed
 make test-integration # apps/api/tests/integration, needs live SQL Server
-make test-e2e         # tests/e2e black-box tests against the running API (needs `make up`)
 ```
 
 ### API (apps/api)
@@ -88,7 +85,7 @@ Loads `database/scripts/01`-`07` against a SQL Server not managed by Compose.
 
 ## Architecture
 
-### Golden rules (see `docs/arquitectura-visual.md` for diagrams)
+### Golden rules
 
 - **Schema and API are both English**: physical tables/columns are English
   snake_case (`services`, `name`); the API exposes camelCase (`serviceId`,
@@ -123,7 +120,7 @@ threadpool. All routes mount under `/api/v1` (see `_register_routers` in
 (`owner`/`superadmin`), and `tenantId` (owners only). Every owner-scoped query
 filters by the `tenantId` pulled from the *decoded token*, never from request
 params/body — this is what makes cross-tenant access return 404 instead of
-leaking data. See the JWT sequence diagram in `docs/arquitectura-visual.md` §3.
+leaking data.
 
 **Errors**: stored procedures raise SQL `THROW` with a custom 5-digit error
 number in the 50000s range; `app/errors.py` maps that range to an HTTP status
@@ -156,9 +153,6 @@ back-office (`/dashboard`, `/services`, `/bookings`, `/customers`,
 - `components/ui/`: shadcn/ui primitives; `components/admin/`,
   `components/booking/`, `components/marketing/`: domain screens/managers.
 
-`docs/frontend-map.md` maps every route to the endpoints it calls — check it
-before wiring a new screen.
-
 ### Database (database/)
 
 `database/scripts/01`-`08` are numbered, ordered SQL Server scripts (schema,
@@ -176,9 +170,6 @@ the raw SQL.
 - `apps/api/tests/integration`: hits a real SQL Server with the schema
   applied; includes cross-tenant isolation checks (a foreign tenant's
   resources must 404, never leak).
-- `tests/e2e`: black-box HTTP tests against the running API from `make up`
-  (auth, catalog/scheduling CRUD, RFC 7807 error shape, tenant isolation,
-  soft-delete, full booking-lifecycle flows).
 
 CI (`.github/workflows/ci.yml`) runs these against service containers;
 `publish-images.yml` builds and publishes `frontend`/`api` images to GHCR on
