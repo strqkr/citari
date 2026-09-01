@@ -62,6 +62,7 @@ model User {
 model Session {
   id               String    @id @default(uuid()) @db.Uuid
   userId           String    @db.Uuid
+  tenantId         String?   @db.Uuid
   refreshTokenHash String    @unique @db.Char(64)
   familyId         String    @db.Uuid
   expiresAt        DateTime  @db.Timestamptz(3)
@@ -71,34 +72,38 @@ model Session {
   userAgent        String?   @db.VarChar(512)
   createdAt        DateTime  @default(now()) @db.Timestamptz(3)
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant           Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
+  @@index([tenantId, revokedAt])
   @@index([familyId])
   @@map("sessions")
 }
 
 model Tenant {
-  id              String             @id @default(uuid()) @db.Uuid
-  name            String             @db.VarChar(200)
-  slug            String             @unique @db.VarChar(100)
-  status          TenantStatus       @default(PENDING_VERIFICATION)
-  timezone        String             @db.VarChar(64)
-  locale          String             @default("es-CR") @db.VarChar(16)
-  currency        String             @default("CRC") @db.Char(3)
-  description     String?
-  logoUrl         String?            @db.VarChar(1024)
-  publicMessage   String?            @db.VarChar(500)
-  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
-  memberships     TenantMembership[]
-  contacts        TenantContact[]
-  categories      ServiceCategory[]
-  services        Service[]
-  locations       Location[]
-  customers       Customer[]
-  bookings        Booking[]
-  auditEvents     AuditEvent[]
-  idempotencyKeys IdempotencyKey[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  name               String              @db.VarChar(200)
+  slug               String              @unique @db.VarChar(100)
+  status             TenantStatus        @default(PENDING_VERIFICATION)
+  timezone           String              @db.VarChar(64)
+  locale             String              @default("es-CR") @db.VarChar(16)
+  currency           String              @default("CRC") @db.Char(3)
+  description        String?
+  logoUrl            String?             @db.VarChar(1024)
+  publicMessage      String?             @db.VarChar(500)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  memberships        TenantMembership[]
+  sessions           Session[]
+  contacts           TenantContact[]
+  categories         ServiceCategory[]
+  services           Service[]
+  locations          Location[]
+  availabilityBlocks AvailabilityBlock[]
+  customers          Customer[]
+  bookings           Booking[]
+  auditEvents        AuditEvent[]
+  idempotencyKeys    IdempotencyKey[]
 
   @@index([status])
   @@map("tenants")
@@ -174,23 +179,24 @@ model Service {
 }
 
 model Location {
-  id            String         @id @default(uuid()) @db.Uuid
-  tenantId      String         @db.Uuid
-  name          String         @db.VarChar(200)
-  timezone      String?        @db.VarChar(64)
-  addressLine1  String?        @db.VarChar(200)
-  addressLine2  String?        @db.VarChar(200)
-  province      String?        @db.VarChar(100)
-  canton        String?        @db.VarChar(100)
-  district      String?        @db.VarChar(100)
-  postalCode    String?        @db.VarChar(20)
-  isMain        Boolean        @default(false)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  businessHours BusinessHour[]
-  bookings      Booking[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  tenantId           String              @db.Uuid
+  name               String              @db.VarChar(200)
+  timezone           String?             @db.VarChar(64)
+  addressLine1       String?             @db.VarChar(200)
+  addressLine2       String?             @db.VarChar(200)
+  province           String?             @db.VarChar(100)
+  canton             String?             @db.VarChar(100)
+  district           String?             @db.VarChar(100)
+  postalCode         String?             @db.VarChar(20)
+  isMain             Boolean             @default(false)
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(3)
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  businessHours      BusinessHour[]
+  availabilityBlocks AvailabilityBlock[]
+  bookings           Booking[]
 
   @@unique([tenantId, id])
   @@index([tenantId, isActive])
@@ -210,6 +216,22 @@ model BusinessHour {
   @@unique([locationId, dayOfWeek])
   @@index([tenantId, locationId])
   @@map("business_hours")
+}
+
+model AvailabilityBlock {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  locationId String   @db.Uuid
+  startsAt   DateTime @db.Timestamptz(3)
+  endsAt     DateTime @db.Timestamptz(3)
+  reason     String?  @db.VarChar(500)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, id])
+  @@index([tenantId, locationId, startsAt, endsAt])
+  @@map("availability_blocks")
 }
 
 model Customer {

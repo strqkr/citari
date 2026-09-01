@@ -19,37 +19,28 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner, ManagerHeader } from "@/components/admin/manager-ui";
-import { apiDelete, apiPatch, apiPost, isMockMode } from "@/lib/api";
+import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
 
 type Location = {
-  locationId: number;
+  id: string;
   name: string;
   province: string;
   canton: string;
   district: string;
   postalCode: string;
-  phone: string | null;
   isMain: boolean;
   isActive: boolean;
 };
-
-const initialLocations: Location[] = [
-  { locationId: 1, name: "Sede central", province: "San Jose", canton: "San Jose", district: "Carmen", postalCode: "10101", phone: "2222-1010", isMain: true, isActive: true },
-  { locationId: 2, name: "Sucursal oeste", province: "San Jose", canton: "Escazu", district: "Escazu", postalCode: "10201", phone: "2222-3030", isMain: false, isActive: true }
-];
 
 const emptyForm = { name: "", province: "", canton: "", district: "", postalCode: "", phone: "", isMain: false, isActive: true };
 type LocationForm = typeof emptyForm;
 
 export function LocationsManager() {
-  const { items: locations, setItems: setLocations, loading, error, setError, reload } = useResource<Location>(
-    endpoints.locations.list,
-    initialLocations
-  );
+  const { items: locations, setItems: setLocations, loading, error, setError, reload } = useResource<Location>(endpoints.locations.list);
   const [form, setForm] = useState<LocationForm>(emptyForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const isEditing = editingId !== null;
@@ -61,14 +52,14 @@ export function LocationsManager() {
   }
 
   function editLocation(location: Location) {
-    setEditingId(location.locationId);
+    setEditingId(location.id);
     setForm({
       name: location.name,
       province: location.province,
       canton: location.canton,
       district: location.district,
       postalCode: location.postalCode,
-      phone: location.phone ?? "",
+      phone: "",
       isMain: location.isMain,
       isActive: location.isActive
     });
@@ -78,15 +69,6 @@ export function LocationsManager() {
   async function saveLocation() {
     if (!form.name.trim() || !form.province.trim() || !form.canton.trim() || !form.district.trim() || !form.postalCode.trim()) return;
     setError(null);
-    if (isMockMode()) {
-      if (editingId) {
-        setLocations((current) => current.map((l) => (l.locationId === editingId ? { ...l, ...form } : l)));
-      } else {
-        setLocations((current) => [...current, { locationId: Date.now(), ...form }]);
-      }
-      setIsModalOpen(false);
-      return;
-    }
     setBusy(true);
     try {
       const body = {
@@ -95,12 +77,11 @@ export function LocationsManager() {
         canton: form.canton,
         district: form.district,
         postalCode: form.postalCode,
-        phone: form.phone || null,
         isMain: form.isMain
       };
       if (editingId) {
         const updated = await apiPatch<Location>(endpoints.locations.byId(editingId), { ...body, isActive: form.isActive });
-        setLocations((current) => current.map((l) => (l.locationId === editingId ? updated : l)));
+        setLocations((current) => current.map((l) => (l.id === editingId ? updated : l)));
       } else {
         const created = await apiPost<Location>(endpoints.locations.list, body);
         setLocations((current) => [...current, created]);
@@ -115,28 +96,20 @@ export function LocationsManager() {
 
   async function toggleLocation(location: Location) {
     const next = !location.isActive;
-    if (isMockMode()) {
-      setLocations((current) => current.map((l) => (l.locationId === location.locationId ? { ...l, isActive: next } : l)));
-      return;
-    }
     setError(null);
     try {
-      const updated = await apiPatch<Location>(endpoints.locations.byId(location.locationId), { isActive: next });
-      setLocations((current) => current.map((l) => (l.locationId === location.locationId ? updated : l)));
+      const updated = await apiPatch<Location>(endpoints.locations.byId(location.id), { isActive: next });
+      setLocations((current) => current.map((l) => (l.id === location.id ? updated : l)));
     } catch (err) {
       setError(errMessage(err, "No se pudo cambiar el estado."));
     }
   }
 
   async function deleteLocation(location: Location) {
-    if (isMockMode()) {
-      setLocations((current) => current.filter((l) => l.locationId !== location.locationId));
-      return;
-    }
     setError(null);
     try {
-      await apiDelete(endpoints.locations.byId(location.locationId));
-      setLocations((current) => current.filter((l) => l.locationId !== location.locationId));
+      await apiDelete(endpoints.locations.byId(location.id));
+      setLocations((current) => current.filter((l) => l.id !== location.id));
     } catch (err) {
       setError(errMessage(err, "No se pudo eliminar la sede."));
     }
@@ -183,7 +156,7 @@ export function LocationsManager() {
                 </TableRow>
               ) : (
                 locations.map((location) => (
-                  <TableRow key={location.locationId}>
+                  <TableRow key={location.id}>
                     <TableCell className="pl-6 font-medium">{location.name}</TableCell>
                     <TableCell className="text-muted-foreground">{`${location.district}, ${location.canton}, ${location.province}`}</TableCell>
                     <TableCell className="text-muted-foreground">{location.postalCode}</TableCell>

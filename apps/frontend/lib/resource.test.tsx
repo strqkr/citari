@@ -21,9 +21,9 @@ describe("resource loading", () => {
     await expect(apiList<number>("/items")).resolves.toEqual([2]);
   });
 
-  it("loads a list without displaying legacy mock values", async () => {
+  it("loads a list from the API", async () => {
     mockedGet.mockResolvedValueOnce(["real"]);
-    const { result } = renderHook(() => useResource<string>("/items", ["fake"]));
+    const { result } = renderHook(() => useResource<string>("/items"));
     expect(result.current.items).toEqual([]);
     await waitFor(() => expect(result.current.items).toEqual(["real"]));
     expect(result.current.loading).toBe(false);
@@ -33,8 +33,8 @@ describe("resource loading", () => {
     mockedGet
       .mockRejectedValueOnce(new ApiError(503, "Unavailable", "Try later"))
       .mockRejectedValueOnce(new ApiError(503, "Unavailable", "Try later"));
-    const list = renderHook(() => useResource<string>("/items", ["fake"]));
-    const one = renderHook(() => useResourceOne<{ value: string }>("/item", { value: "fake" }));
+    const list = renderHook(() => useResource<string>("/items"));
+    const one = renderHook(() => useResourceOne<{ value: string }>("/item"));
     await waitFor(() => expect(list.result.current.error).toBe("Try later"));
     await waitFor(() => expect(one.result.current.error).toBe("Try later"));
     expect(list.result.current.items).toEqual([]);

@@ -1,16 +1,13 @@
 import { ServiceSelection } from "@/components/booking/ServiceSelection";
 import { BookingShell } from "@/components/layout/BookingShell";
-import { apiGet, isMockMode } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import { mockServices } from "@/lib/mock-data";
-import type { Service } from "@/types/service";
+import type { Service, ServiceCategory } from "@/types/service";
 
 async function loadServices(slug: string): Promise<Service[]> {
-  if (isMockMode()) {
-    return mockServices;
-  }
   try {
-    return await apiGet<Service[]>(endpoints.public.services(slug));
+    const categories = await apiGet<(ServiceCategory & { services: Service[] })[]>(endpoints.public.services(slug));
+    return categories.flatMap((category) => category.services.map((service) => ({ ...service, categoryId: category.id, category })));
   } catch {
     return [];
   }

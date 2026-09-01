@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LayoutDashboard, LogOut, ShieldCheck, Store } from "lucide-react";
-import { clearAuthToken, isMockMode } from "@/lib/api";
+import { apiPost } from "@/lib/api";
+import { endpoints } from "@/lib/endpoints";
 import { useAuth, userInitials } from "@/hooks/useAuth";
 import {
   Sidebar,
@@ -46,8 +47,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    if (isMockMode()) return;
-    if (!user || user.role !== "superadmin") router.replace("/admin/login");
+    if (!user || user.globalRole !== "SUPER_ADMIN") router.replace("/admin/login");
   }, [loading, user, router]);
 
   if (loading || !user) {
@@ -63,7 +63,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <AdminSidebar />
         <SidebarInset>
-          <AdminTopbar user={user} onLogout={() => { clearAuthToken(); router.push("/admin/login"); }} />
+          <AdminTopbar user={user} onLogout={() => { void apiPost(endpoints.auth.logout).finally(() => router.push("/admin/login")); }} />
           <div className="flex-1 overflow-y-auto bg-background p-4 md:p-8">{children}</div>
         </SidebarInset>
       </SidebarProvider>

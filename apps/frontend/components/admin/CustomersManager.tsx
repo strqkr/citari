@@ -11,16 +11,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBanner, ManagerHeader } from "@/components/admin/manager-ui";
-import { apiPost, isMockMode } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
 import type { Customer } from "@/types/customer";
-
-const initialCustomers: Customer[] = [
-  { customerId: 1, firstName: "Sofia", lastName: "Campos", email: "sofia@email.com", phone: "8787-1010" },
-  { customerId: 2, firstName: "Marco", lastName: "Arias", email: "marco@email.com", phone: "8686-1212" },
-  { customerId: 3, firstName: "Daniela", lastName: "Rojas", email: "daniela@email.com", phone: "8585-3434" }
-];
 
 const emptyForm = { firstName: "", lastName: "", email: "", phone: "", notes: "" };
 
@@ -29,10 +23,7 @@ function initials(c: Customer) {
 }
 
 export function CustomersManager() {
-  const { items: customers, setItems: setCustomers, loading, error, setError, reload } = useResource<Customer>(
-    endpoints.customers.list,
-    initialCustomers
-  );
+  const { items: customers, setItems: setCustomers, loading, error, setError, reload } = useResource<Customer>(endpoints.customers.list);
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -44,12 +35,6 @@ export function CustomersManager() {
   async function saveCustomer() {
     if (!form.firstName.trim() || !form.lastName.trim()) return;
     setError(null);
-    if (isMockMode()) {
-      setCustomers((current) => [...current, { customerId: Date.now(), ...form }]);
-      setForm(emptyForm);
-      setIsModalOpen(false);
-      return;
-    }
     setBusy(true);
     try {
       const created = await apiPost<Customer>(endpoints.customers.list, form);
@@ -102,7 +87,7 @@ export function CustomersManager() {
                 </TableRow>
               ) : (
                 filtered.map((customer) => (
-                  <TableRow key={customer.customerId}>
+                  <TableRow key={customer.id}>
                     <TableCell className="pl-6">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8"><AvatarFallback>{initials(customer)}</AvatarFallback></Avatar>

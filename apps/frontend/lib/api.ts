@@ -6,12 +6,7 @@ const API_PREFIX = "/api/v1";
 // server fetches (Server Components, SSR) need the internal Docker service
 // URL — see lib/frontend-config.ts for why these can differ.
 function apiBaseUrl(): string {
-  return typeof window === "undefined" ? frontendConfig.apiInternalBaseUrl : frontendConfig.apiBaseUrl;
-}
-const TOKEN_STORAGE_KEY = "citari_token";
-
-export function isMockMode() {
-  return false;
+  return typeof window === "undefined" ? `${frontendConfig.apiInternalBaseUrl}${API_PREFIX}` : "/api/backend";
 }
 
 /**
@@ -37,47 +32,23 @@ export class ApiError extends Error {
   }
 }
 
-export function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function setAuthToken(token: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearAuthToken(): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
-
 function isProblemDetail(value: unknown): value is { type?: string; title?: string; status?: number; detail?: string; traceId?: string } {
   return typeof value === "object" && value !== null && "status" in value;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
-  const token = getAuthToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+  const headers: Record<string, string> = { ...extraHeaders };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(`${apiBaseUrl()}${API_PREFIX}${path}`, {
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "same-origin"
   });
-
-  if (response.status === 401) {
-    // Token invalido o expirado: lo limpiamos para que la sesion se rehidrate
-    // como no autenticado (las guardas de ruta redirigen a login).
-    clearAuthToken();
-  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -113,6 +84,10 @@ export function apiGet<T>(path: string): Promise<T> {
 
 export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   return request<T>("POST", path, body);
+}
+
+export function apiPostIdempotent<T>(path: string, body: unknown, key: string): Promise<T> {
+  return request<T>("POST", path, body, { "Idempotency-Key": key });
 }
 
 export function apiPatch<T>(path: string, body?: unknown): Promise<T> {

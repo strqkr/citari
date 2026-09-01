@@ -1,7 +1,1 @@
-export type Customer = {
-  customerId: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-};
+export type Customer = { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; notes: string | null; consentAt?: string | null; createdAt?: string; updatedAt?: string };

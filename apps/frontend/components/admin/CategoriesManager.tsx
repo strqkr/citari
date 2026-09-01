@@ -19,24 +19,15 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner, ManagerHeader } from "@/components/admin/manager-ui";
-import { apiDelete, apiPatch, apiPost, isMockMode } from "@/lib/api";
+import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
 
-type Category = { categoryId: number; name: string; description: string | null; isActive: boolean };
-
-const initialCategories: Category[] = [
-  { categoryId: 1, name: "Odontologia general", description: "Consultas, limpiezas y controles preventivos.", isActive: true },
-  { categoryId: 2, name: "Estetica dental", description: "Blanqueamientos y procedimientos esteticos.", isActive: true },
-  { categoryId: 3, name: "Ortodoncia", description: "Valoraciones y controles de tratamiento.", isActive: false }
-];
+type Category = { id: string; name: string; description: string | null; isActive: boolean };
 
 export function CategoriesManager() {
-  const { items: categories, setItems: setCategories, loading, error, setError, reload } = useResource<Category>(
-    endpoints.serviceCategories.list,
-    initialCategories
-  );
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const { items: categories, setItems: setCategories, loading, error, setError, reload } = useResource<Category>(endpoints.serviceCategories.list);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -46,21 +37,11 @@ export function CategoriesManager() {
   async function saveCategory() {
     if (!name.trim()) return;
     setError(null);
-    if (isMockMode()) {
-      if (editingId) {
-        setCategories((current) => current.map((c) => (c.categoryId === editingId ? { ...c, name, description, isActive } : c)));
-      } else {
-        setCategories((current) => [...current, { categoryId: Date.now(), name, description, isActive }]);
-      }
-      resetForm();
-      setIsModalOpen(false);
-      return;
-    }
     setBusy(true);
     try {
       if (editingId) {
         const updated = await apiPatch<Category>(endpoints.serviceCategories.byId(editingId), { name, description, isActive });
-        setCategories((current) => current.map((c) => (c.categoryId === editingId ? updated : c)));
+        setCategories((current) => current.map((c) => (c.id === editingId ? updated : c)));
       } else {
         const created = await apiPost<Category>(endpoints.serviceCategories.list, { name, description });
         setCategories((current) => [...current, created]);
@@ -75,7 +56,7 @@ export function CategoriesManager() {
   }
 
   function editCategory(category: Category) {
-    setEditingId(category.categoryId);
+    setEditingId(category.id);
     setName(category.name);
     setDescription(category.description ?? "");
     setIsActive(category.isActive);
@@ -84,28 +65,20 @@ export function CategoriesManager() {
 
   async function toggleCategory(category: Category) {
     const next = !category.isActive;
-    if (isMockMode()) {
-      setCategories((current) => current.map((c) => (c.categoryId === category.categoryId ? { ...c, isActive: next } : c)));
-      return;
-    }
     setError(null);
     try {
-      const updated = await apiPatch<Category>(endpoints.serviceCategories.byId(category.categoryId), { isActive: next });
-      setCategories((current) => current.map((c) => (c.categoryId === category.categoryId ? updated : c)));
+      const updated = await apiPatch<Category>(endpoints.serviceCategories.byId(category.id), { isActive: next });
+      setCategories((current) => current.map((c) => (c.id === category.id ? updated : c)));
     } catch (err) {
       setError(errMessage(err, "No se pudo cambiar el estado."));
     }
   }
 
   async function deleteCategory(category: Category) {
-    if (isMockMode()) {
-      setCategories((current) => current.filter((c) => c.categoryId !== category.categoryId));
-      return;
-    }
     setError(null);
     try {
-      await apiDelete(endpoints.serviceCategories.byId(category.categoryId));
-      setCategories((current) => current.filter((c) => c.categoryId !== category.categoryId));
+      await apiDelete(endpoints.serviceCategories.byId(category.id));
+      setCategories((current) => current.filter((c) => c.id !== category.id));
     } catch (err) {
       setError(errMessage(err, "No se pudo eliminar la categoria."));
     }
@@ -160,7 +133,7 @@ export function CategoriesManager() {
                 </TableRow>
               ) : (
                 categories.map((category) => (
-                  <TableRow key={category.categoryId}>
+                  <TableRow key={category.id}>
                     <TableCell className="pl-6 font-medium">{category.name}</TableCell>
                     <TableCell className="text-muted-foreground">{category.description}</TableCell>
                     <TableCell>
