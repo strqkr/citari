@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, apiGet, isMockMode } from "@/lib/api";
+import { ApiError, apiGet } from "@/lib/api";
 import type { Page } from "@/types/page";
 
 function unwrap<T>(res: Page<T> | T[]): T[] {
@@ -26,17 +26,13 @@ export function errMessage(err: unknown, fallback: string): string {
  * `mock` must be a stable reference (module-level constant); it is
  * intentionally excluded from the reload dependencies.
  */
-export function useResource<T>(path: string, mock: T[]) {
-  const [items, setItems] = useState<T[]>(mock);
-  const [loading, setLoading] = useState(!isMockMode());
+export function useResource<T>(path: string, legacyMock?: T[]) {
+  void legacyMock;
+  const [items, setItems] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
-    if (isMockMode()) {
-      setItems(mock);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     apiList<T>(path)
       .then((rows) => {
@@ -45,7 +41,6 @@ export function useResource<T>(path: string, mock: T[]) {
       })
       .catch((err) => setError(errMessage(err, "No se pudo cargar la informacion.")))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
   useEffect(() => {
@@ -56,17 +51,13 @@ export function useResource<T>(path: string, mock: T[]) {
 }
 
 /** Single-object variant of {@link useResource} (e.g. the dashboard summary). */
-export function useResourceOne<T>(path: string, mock: T) {
-  const [data, setData] = useState<T>(mock);
-  const [loading, setLoading] = useState(!isMockMode());
+export function useResourceOne<T>(path: string, legacyMock?: T) {
+  void legacyMock;
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isMockMode()) {
-      setData(mock);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     apiGet<T>(path)
       .then((row) => {
@@ -75,7 +66,6 @@ export function useResourceOne<T>(path: string, mock: T) {
       })
       .catch((err) => setError(errMessage(err, "No se pudo cargar la informacion.")))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
   return { data, loading, error };

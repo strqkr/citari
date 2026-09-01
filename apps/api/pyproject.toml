@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "citari-api"
 version = "0.1.0"
 description = "Citari API (FastAPI + pyodbc, sync)"
-authors = [{name = "Andrew Fuentes", email = "andrew@euxora.net"}]
+authors = [{name = "strqkr", email = "783613+strqkr@users.noreply.github.com"}]
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [

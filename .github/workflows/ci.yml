@@ -6,6 +6,27 @@ on:
   pull_request:
 
 jobs:
+  pnpm-quality:
+    name: pnpm quality and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable pinned pnpm
+        run: corepack enable
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint, typecheck, coverage, and production builds
+        run: pnpm quality
+
   postgres-prisma-foundation:
     name: PostgreSQL + Prisma foundation
     runs-on: ubuntu-latest
@@ -119,18 +140,15 @@ jobs:
         run: pytest tests/unit -q
 
   build-api:
-    name: Build API Docker image
+    name: Build PostgreSQL API Docker image
     runs-on: ubuntu-latest
-    needs: lint-api
+    needs: [pnpm-quality, postgres-prisma-foundation]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Build API Docker image
-        run: docker build -t citari-api:ci apps/api
-
-      - name: Verify ODBC Driver 18 is available in the image
-        run: docker run --rm citari-api:ci python -c "import pyodbc; assert 'ODBC Driver 18 for SQL Server' in pyodbc.drivers()"
+        run: docker build -f apps/api-next/Dockerfile -t citari-api:ci .
 
   integration:
     name: Integration tests against SQL Server

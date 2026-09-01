@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { endpoints } from "@/lib/endpoints";
 import { useResource, useResourceOne } from "@/lib/resource";
-import { mockBookings } from "@/lib/mock-data";
 import type { Booking } from "@/types/booking";
 
 type Dashboard = {
@@ -22,17 +21,6 @@ type Dashboard = {
   totalCustomers: number;
   totalActiveServices: number;
   totalActiveLocations: number;
-};
-
-const mockDashboard: Dashboard = {
-  name: "Clinica Dental Sonrisa",
-  totalBookings: 143,
-  pendingBookings: 12,
-  confirmedBookings: 110,
-  cancelledBookings: 21,
-  totalCustomers: 248,
-  totalActiveServices: 18,
-  totalActiveLocations: 2
 };
 
 const statusLabels: Record<Booking["status"], string> = {
@@ -85,14 +73,14 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { data: summary, loading: loadingSummary } = useResourceOne<Dashboard>(endpoints.reports.dashboard, mockDashboard);
-  const { items: bookings, loading: loadingBookings } = useResource<Booking>(endpoints.bookings.list, mockBookings);
+  const { data: summary, loading: loadingSummary, error: summaryError } = useResourceOne<Dashboard>(endpoints.reports.dashboard);
+  const { items: bookings, loading: loadingBookings, error: bookingsError } = useResource<Booking>(endpoints.bookings.list);
 
   const stats = [
-    { label: "Reservas totales", value: summary.totalBookings, helper: "acumuladas", icon: CalendarCheck },
-    { label: "Pendientes", value: summary.pendingBookings, helper: "por confirmar", icon: Clock3 },
-    { label: "Servicios activos", value: summary.totalActiveServices, helper: "publicados", icon: Scissors },
-    { label: "Clientes", value: summary.totalCustomers, helper: "registrados", icon: Users }
+    { label: "Reservas totales", value: summary?.totalBookings ?? 0, helper: "acumuladas", icon: CalendarCheck },
+    { label: "Pendientes", value: summary?.pendingBookings ?? 0, helper: "por confirmar", icon: Clock3 },
+    { label: "Servicios activos", value: summary?.totalActiveServices ?? 0, helper: "publicados", icon: Scissors },
+    { label: "Clientes", value: summary?.totalCustomers ?? 0, helper: "registrados", icon: Users }
   ];
   const recent = bookings.slice(0, 6);
   const agenda = bookings.slice(0, 5);
@@ -103,12 +91,18 @@ export default function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="font-serif text-2xl font-medium tracking-tight">Hola de nuevo</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Resumen operativo de {summary.name}.</p>
+            <p className="mt-1 text-sm text-muted-foreground">{summary ? `Resumen operativo de ${summary.name}.` : "Resumen operativo."}</p>
           </div>
           <Button asChild>
             <Link href="/bookings">Ver reservas</Link>
           </Button>
         </div>
+
+        {(summaryError || bookingsError) && (
+          <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {summaryError || bookingsError}
+          </div>
+        )}
 
         <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {stats.map((s) => (

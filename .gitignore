@@ -15,6 +15,10 @@ __pycache__/
 .vscode/
 .idea/
 coverage/
+*.lcov
+.nyc_output/
+.turbo/
+.pnpm-debug.log
 *.log
 *.sqlite
 *.db
