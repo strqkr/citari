@@ -2,7 +2,7 @@
   "name": "@citari/frontend",
   "version": "0.1.0",
   "private": true,
-  "author": "strqkr <2248959+strqkr@users.noreply.github.com>",
+  "author": "Andrew Fuentes <andrew@euxora.net>",
   "packageManager": "pnpm@10.34.5",
   "pnpm": {
     "onlyBuiltDependencies": ["sharp", "unrs-resolver"]

@@ -19,6 +19,8 @@ setup for the full booking, administration, and tracking flow.
 - [docs/api-handover.md](docs/api-handover.md) API handover: conventions, full endpoint table, curl examples, statuses
 - [docs/sql-signatures.md](docs/sql-signatures.md) reference for stored procedures, views, functions, triggers, and THROW codes
 - [docs/deployment.md](docs/deployment.md) production deployment: Docker images, GHCR publishing, and required configuration
+- [docs/production-mvp-blueprint.md](docs/production-mvp-blueprint.md) production transformation plan and 200-point MVP backlog
+- [docs/adr/0001-postgresql-prisma-api.md](docs/adr/0001-postgresql-prisma-api.md) PostgreSQL, Prisma, and TypeScript API decision
 
 **Other:**
 
