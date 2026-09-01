@@ -6,22 +6,20 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { ApiError, apiGet, apiPost, isMockMode } from "@/lib/api";
+import { ApiError, apiGet, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 
 type Tenant = {
-  tenantId: number;
+  id: string;
   name: string;
   slug: string;
   status?: string;
-  email?: string | null;
-  phone?: string | null;
   description?: string | null;
 };
 
 function statusClass(status?: string) {
-  if (status === "activo") return "bg-primary/10 text-primary";
-  if (status === "suspendido") return "bg-destructive/10 text-destructive";
+  if (status === "ACTIVE") return "bg-primary/10 text-primary";
+  if (status === "SUSPENDED") return "bg-destructive/10 text-destructive";
   return "bg-muted text-muted-foreground";
 }
 
@@ -34,11 +32,6 @@ export default function AdminTenantDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isMockMode()) {
-      setTenant({ tenantId: Number(id), name: "Barberia Elite", slug: "barberia-elite", status: "activo", email: "info@barberiaelite.com", phone: "2222-1010" });
-      setLoading(false);
-      return;
-    }
     apiGet<Tenant>(endpoints.admin.tenantById(id))
       .then(setTenant)
       .catch(() => setTenant(null))
@@ -47,14 +40,10 @@ export default function AdminTenantDetailPage() {
 
   async function action(kind: "activate" | "suspend") {
     setError(null);
-    if (isMockMode()) {
-      setTenant((t) => (t ? { ...t, status: kind === "activate" ? "activo" : "suspendido" } : t));
-      return;
-    }
     setBusy(true);
     try {
       const url = kind === "activate" ? endpoints.admin.activateTenant(id) : endpoints.admin.suspendTenant(id);
-      const updated = await apiPost<Tenant>(url);
+      const updated = await apiPost<Tenant>(url, { reason: "Administrative status update" });
       setTenant(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail || err.title : "No se pudo actualizar el estado.");
@@ -66,8 +55,6 @@ export default function AdminTenantDetailPage() {
   const rows: [string, string][] = tenant
     ? [
         ["Slug", tenant.slug],
-        ["Correo", tenant.email ?? "-"],
-        ["Telefono", tenant.phone ?? "-"],
         ["Estado", tenant.status ?? "-"]
       ]
     : [];
@@ -112,13 +99,13 @@ export default function AdminTenantDetailPage() {
             {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
 
             <div className="mt-6 flex gap-3">
-              <Button onClick={() => action("activate")} disabled={busy || tenant.status === "activo"}>
+              <Button onClick={() => action("activate")} disabled={busy || tenant.status === "ACTIVE"}>
                 Activar
               </Button>
               <Button
                 variant="outline"
                 onClick={() => action("suspend")}
-                disabled={busy || tenant.status === "suspendido"}
+                disabled={busy || tenant.status === "SUSPENDED"}
                 className="border-destructive/40 text-destructive hover:bg-destructive/10"
               >
                 Suspender

@@ -2,15 +2,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BookingShell } from "@/components/layout/BookingShell";
 import { buttonVariants } from "@/components/ui/button";
-import { apiGet, isMockMode } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import { mockTenant } from "@/lib/mock-data";
 import type { Tenant } from "@/types/tenant";
 
 async function loadTenant(slug: string): Promise<Tenant | null> {
-  if (isMockMode()) {
-    return mockTenant;
-  }
   try {
     return await apiGet<Tenant>(endpoints.public.tenant(slug));
   } catch {

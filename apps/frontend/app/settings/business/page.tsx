@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PrivateShell } from "@/components/layout/PrivateShell";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader, StatusBadge, textareaClass } from "@/components/ui/page-header";
-import { ApiError, apiGet, apiPatch, isMockMode } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import { mockTenant } from "@/lib/mock-data";
 
 type Tenant = {
   slug: string;
@@ -24,48 +23,16 @@ type Tenant = {
 
 export default function BusinessSettingsPage() {
   const [form, setForm] = useState<Tenant>({ slug: "", name: "" });
-  const [saved, setSaved] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isMockMode()) {
-      setForm({ ...mockTenant });
-      return;
-    }
     apiGet<Tenant>(endpoints.tenant.current)
       .then((tenant) => setForm(tenant))
-      .catch(() => setForm({ ...mockTenant }));
+      .catch(() => setError("No se pudo cargar la configuracion."));
   }, []);
 
   function update(key: keyof Tenant, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    if (isMockMode()) {
-      setSaved(true);
-      return;
-    }
-    setLoading(true);
-    try {
-      await apiPatch(endpoints.tenant.current, {
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        description: form.description,
-        publicMessage: form.publicMessage,
-        logoUrl: form.logoUrl
-      });
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.title : "No se pudo guardar.");
-    } finally {
-      setLoading(false);
-    }
   }
 
   return (
@@ -81,7 +48,7 @@ export default function BusinessSettingsPage() {
           }
         />
 
-        <form onSubmit={submit} className="mt-6 space-y-4 rounded-2xl border border-border bg-card p-6 shadow-soft">
+        <div className="mt-6 space-y-4 rounded-2xl border border-border bg-card p-6 shadow-soft">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Perfil publico</h2>
             <StatusBadge active={(form.status ?? "activo") === "activo"} labels={["Activo", "Suspendido"]} />
@@ -120,14 +87,8 @@ export default function BusinessSettingsPage() {
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          {saved ? <p className="text-sm text-primary">Cambios guardados.</p> : null}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="submit" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar cambios"}
-            </Button>
-          </div>
-        </form>
+          <p className="text-xs text-muted-foreground">La edicion del perfil estara disponible cuando el API habilite el contrato de actualizacion.</p>
+        </div>
       </div>
     </PrivateShell>
   );

@@ -1,0 +1,14 @@
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../../database/prisma.service.js";
+import type { Prisma } from "../../generated/prisma/client.js";
+import type { CreateCustomer, CustomerQuery, UpdateCustomer } from "./customers.schemas.js";
+
+@Injectable()
+export class CustomersService {
+  constructor(private readonly prisma: PrismaService) {}
+  list(tenantId: string, query: CustomerQuery) { return this.prisma.withTenant(tenantId, async (tx) => { const where = { tenantId, anonymizedAt: null, ...(query.search ? { OR: ["firstName", "lastName", "email", "phone"].map((field) => ({ [field]: { contains: query.search, mode: "insensitive" as const } })) } : {}) }; const [items, total] = await Promise.all([tx.customer.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), tx.customer.count({ where })]); return { items, pagination: { page: query.page, pageSize: query.pageSize, total, pages: Math.ceil(total / query.pageSize) } }; }); }
+  get(tenantId: string, id: string) { return this.prisma.withTenant(tenantId, async (tx) => { const customer = await tx.customer.findFirst({ where: { id, tenantId, anonymizedAt: null } }); if (!customer) throw new NotFoundException("Customer was not found"); return customer; }); }
+  create(tenantId: string, input: CreateCustomer) { const { consent, email, ...data } = input; return this.prisma.withTenant(tenantId, (tx) => tx.customer.create({ data: { ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)), tenantId, email: email?.toLowerCase() ?? null, consentAt: consent ? new Date() : null } as Prisma.CustomerUncheckedCreateInput })); }
+  update(tenantId: string, id: string, input: UpdateCustomer) { return this.prisma.withTenant(tenantId, async (tx) => { if (!(await tx.customer.findFirst({ where: { id, tenantId, anonymizedAt: null }, select: { id: true } }))) throw new NotFoundException("Customer was not found"); const { consent, email, ...data } = input; const updateData = { ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)), ...(email === undefined ? {} : { email: email?.toLowerCase() ?? null }), ...(consent === undefined ? {} : { consentAt: consent ? new Date() : null }) } as Prisma.CustomerUncheckedUpdateInput; return tx.customer.update({ where: { id }, data: updateData }); }); }
+  anonymize(tenantId: string, id: string) { return this.prisma.withTenant(tenantId, async (tx) => { if (!(await tx.customer.findFirst({ where: { id, tenantId, anonymizedAt: null }, select: { id: true } }))) throw new NotFoundException("Customer was not found"); const suffix = id.slice(0, 8); return tx.customer.update({ where: { id }, data: { firstName: "Anonymized", lastName: `Customer ${suffix}`, email: null, phone: null, notes: null, consentAt: null, anonymizedAt: new Date() } }); }); }
+}

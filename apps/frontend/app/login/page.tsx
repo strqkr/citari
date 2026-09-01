@@ -7,9 +7,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiPost, isMockMode, setAuthToken } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import type { LoginResponse } from "@/types/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,19 +21,12 @@ export default function LoginPage() {
     event.preventDefault();
     setError(null);
 
-    if (isMockMode()) {
-      router.push("/dashboard");
-      return;
-    }
-
     setLoading(true);
     try {
-      const response = await apiPost<LoginResponse>(endpoints.auth.login, {
+      await apiPost(endpoints.auth.login, {
         email,
-        password,
-        role: "owner"
+        password
       });
-      setAuthToken(response.accessToken);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail || err.title : "No se pudo iniciar sesion.");

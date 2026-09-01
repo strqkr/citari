@@ -1,7 +1,1 @@
-export type Tenant = {
-  tenantId: number;
-  slug: string;
-  name: string;
-  description: string;
-  publicMessage: string;
-};
+export type Tenant = { id?: string; slug: string; name: string; timezone: string; locale: string; currency: string; description: string | null; logoUrl?: string | null; publicMessage: string | null };

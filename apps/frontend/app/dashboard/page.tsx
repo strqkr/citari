@@ -24,19 +24,11 @@ type Dashboard = {
 };
 
 const statusLabels: Record<Booking["status"], string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmada",
-  cancelled: "Cancelada",
-  completed: "Completada",
-  rescheduled: "Reagendada"
+  HELD: "Retenida", PENDING: "Pendiente", CONFIRMED: "Confirmada", CANCELLED: "Cancelada", COMPLETED: "Completada", NO_SHOW: "No asistio"
 };
 
 const statusVariant: Record<Booking["status"], "brand" | "success" | "muted" | "destructive"> = {
-  pending: "muted",
-  confirmed: "brand",
-  cancelled: "destructive",
-  completed: "success",
-  rescheduled: "brand"
+  HELD: "muted", PENDING: "muted", CONFIRMED: "brand", CANCELLED: "destructive", COMPLETED: "success", NO_SHOW: "destructive"
 };
 
 function StatCard({
@@ -146,11 +138,11 @@ export default function DashboardPage() {
                     </TableRow>
                   ) : (
                     recent.map((booking) => (
-                      <TableRow key={booking.bookingId}>
-                        <TableCell className="pl-6 font-medium">{booking.customerName}</TableCell>
+                      <TableRow key={booking.id}>
+                        <TableCell className="pl-6 font-medium">{booking.customer.firstName} {booking.customer.lastName}</TableCell>
                         <TableCell className="text-muted-foreground">{booking.serviceName}</TableCell>
                         <TableCell className="text-muted-foreground">
-                          {booking.bookingDate} · <span className="font-mono text-xs">{booking.startTime.slice(0, 5)}</span>
+                          {new Date(booking.startAt).toLocaleString("es-CR")}
                         </TableCell>
                         <TableCell>
                           <Badge variant={statusVariant[booking.status]}>{statusLabels[booking.status]}</Badge>
@@ -174,10 +166,10 @@ export default function DashboardPage() {
                 <p className="py-6 text-center text-sm text-muted-foreground">Sin citas.</p>
               ) : (
                 agenda.map((booking) => (
-                  <div key={booking.bookingId} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
-                    <span className="w-12 font-mono text-xs text-muted-foreground">{booking.startTime.slice(0, 5)}</span>
+                  <div key={booking.id} className="flex items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
+                    <span className="w-12 font-mono text-xs text-muted-foreground">{new Date(booking.startAt).toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{booking.customerName}</p>
+                      <p className="truncate text-sm font-medium">{booking.customer.firstName} {booking.customer.lastName}</p>
                       <p className="truncate text-xs text-muted-foreground">{booking.serviceName}</p>
                     </div>
                   </div>

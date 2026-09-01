@@ -6,9 +6,8 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiPost, isMockMode, setAuthToken } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import type { LoginResponse } from "@/types/auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -21,19 +20,12 @@ export default function AdminLoginPage() {
     event.preventDefault();
     setError(null);
 
-    if (isMockMode()) {
-      router.push("/admin/tenants");
-      return;
-    }
-
     setLoading(true);
     try {
-      const response = await apiPost<LoginResponse>(endpoints.auth.login, {
+      await apiPost(endpoints.auth.login, {
         email,
-        password,
-        role: "superadmin"
+        password
       });
-      setAuthToken(response.accessToken);
       router.push("/admin/tenants");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail || err.title : "No se pudo iniciar sesion.");
