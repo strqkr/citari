@@ -24,6 +24,12 @@ demo accounts, or seed data.
 6. Generate Prisma Client: `pnpm db:generate`.
 7. Start the applications: `pnpm dev`.
 
+`MAIL_TRANSPORT=disabled` is acceptable only for local development and tests;
+it leaves encrypted messages in the outbox so flows can be inspected without
+sending mail. For local end-to-end email testing, configure an SMTP sandbox and
+set `MAIL_TRANSPORT=smtp`. Production configuration validation rejects disabled
+delivery.
+
 The database starts empty by design. The superadmin bootstrap is a deployment
 operation, not a seed. Pipe its initial password through standard input; never
 place it in a command argument, environment file, or shell history.

@@ -4,9 +4,11 @@ import request, { type Response } from "supertest";
 import { z } from "zod";
 import { createApplication } from "../../src/bootstrap.js";
 import { totpAt } from "../../src/auth/mfa.js";
+import { openSecret } from "../../src/common/secret-box.js";
+import { PrismaService } from "../../src/database/prisma.service.js";
 
 const tokensSchema = z.object({ accessToken: z.string(), refreshToken: z.string() });
-const registrationResponseSchema = z.object({ tenantId: z.uuid(), status: z.string() });
+const registrationResponseSchema = z.object({ tenantId: z.uuid(), userId: z.uuid(), status: z.string() });
 const profileSchema = z.object({ email: z.email(), tenantRole: z.string().nullable() });
 const categorySchema = z.object({ id: z.uuid() });
 const problemSchema = z.object({ status: z.number() });
@@ -32,9 +34,12 @@ function status(response: Response, expected: number): Response {
 async function main(): Promise<void> {
   const superadminPassword = process.env.E2E_SUPERADMIN_PASSWORD;
   if (!superadminPassword) throw new Error("E2E_SUPERADMIN_PASSWORD is required");
+  const notificationKey = process.env.NOTIFICATION_ENCRYPTION_KEY;
+  if (!notificationKey) throw new Error("NOTIFICATION_ENCRYPTION_KEY is required");
 
   const app = await createApplication();
   const http = request(app.getHttpServer());
+  const prisma = app.get(PrismaService);
   const first = registration(randomUUID().replaceAll("-", "").slice(0, 16));
   const second = registration(randomUUID().replaceAll("-", "").slice(0, 16));
 
@@ -49,6 +54,13 @@ async function main(): Promise<void> {
     const firstRegistration = registrationResponseSchema.parse(status(await http.post("/api/v1/auth/register-owner").send(first), 201).body);
     const secondRegistration = registrationResponseSchema.parse(status(await http.post("/api/v1/auth/register-owner").send(second), 201).body);
     assert.equal(firstRegistration.status, "PENDING_VERIFICATION");
+    for (const registrationResult of [firstRegistration, secondRegistration]) {
+      const delivery = await prisma.emailDelivery.findFirst({ where: { userId: registrationResult.userId, template: "EMAIL_VERIFICATION", sentAt: null }, orderBy: { createdAt: "desc" } });
+      assert.ok(delivery);
+      const payload = JSON.parse(openSecret(delivery.payloadEncrypted, notificationKey, "citari:email-delivery:v1")) as { token: string };
+      status(await http.post("/api/v1/auth/email/verify").send({ challengeToken: payload.token }), 200);
+      status(await http.post("/api/v1/auth/email/verify").send({ challengeToken: payload.token }), 401);
+    }
 
     const passwordChallenge = challengeSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: "andrew@euxora.net", password: superadminPassword }), 200).body);
     assert.equal(passwordChallenge.status, "PASSWORD_CHANGE_REQUIRED");
@@ -91,6 +103,25 @@ async function main(): Promise<void> {
     assert.notEqual(rotated.refreshToken, firstTokens.refreshToken);
     status(await http.post("/api/v1/auth/refresh").send({ refreshToken: firstTokens.refreshToken }), 401);
     status(await http.post("/api/v1/auth/refresh").send({ refreshToken: rotated.refreshToken }), 401);
+
+    const recoverySession = tokensSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: first.ownerEmail, password: first.password }), 200).body);
+    status(await http.post("/api/v1/auth/password/reset/request").send({ email: first.ownerEmail }), 202);
+    const resetDelivery = await prisma.emailDelivery.findFirst({ where: { userId: firstRegistration.userId, template: "PASSWORD_RESET", sentAt: null }, orderBy: { createdAt: "desc" } });
+    assert.ok(resetDelivery);
+    const resetPayload = JSON.parse(openSecret(resetDelivery.payloadEncrypted, notificationKey, "citari:email-delivery:v1")) as { token: string };
+    const resetPassword = "OwnerRecoveredPassword2027B";
+    status(await http.post("/api/v1/auth/password/reset").send({ challengeToken: resetPayload.token, newPassword: resetPassword }), 200);
+    status(await http.post("/api/v1/auth/password/reset").send({ challengeToken: resetPayload.token, newPassword: resetPassword }), 401);
+    status(await http.post("/api/v1/auth/refresh").send({ refreshToken: recoverySession.refreshToken }), 401);
+    tokensSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: first.ownerEmail, password: resetPassword }), 200).body);
+
+    const unknownEmail = `missing-${randomUUID()}@example.test`;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      status(await http.post("/api/v1/auth/login").send({ email: unknownEmail, password: "IncorrectPassword2027" }), 401);
+    }
+    const throttled = status(await http.post("/api/v1/auth/login").send({ email: unknownEmail, password: "IncorrectPassword2027" }), 429);
+    assert.equal(problemSchema.parse(throttled.body).status, 429);
+    assert.match(String(throttled.headers["retry-after"]), /^\d+$/);
   } finally {
     await app.close();
   }

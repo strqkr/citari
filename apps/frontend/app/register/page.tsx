@@ -55,8 +55,8 @@ export default function RegisterPage() {
     return (
       <AuthShell
         eyebrow="Solicitud enviada"
-        title="Tu negocio esta en camino"
-        subtitle="Recibimos los datos. En cuanto el acceso quede activo podras entrar al panel."
+        title="Revisa tu correo"
+        subtitle="Enviamos un enlace al correo del responsable. Verifícalo para que el acceso pueda ser activado."
         footer={
           <Link href="/login" className="font-semibold text-primary hover:underline">
             Ir a iniciar sesion
@@ -64,7 +64,7 @@ export default function RegisterPage() {
         }
       >
         <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground shadow-soft">
-          Siguiente paso: activamos el acceso y configuras servicios, horarios y disponibilidad.
+          El enlace vence en 24 horas. Después de verificarlo, Citari podrá activar el negocio sin exponer ninguna contraseña.
         </div>
       </AuthShell>
     );
@@ -121,8 +121,9 @@ export default function RegisterPage() {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="password">Contrasena</Label>
-            <Input id="password" type="password" minLength={12} value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="Minimo 12 caracteres" required autoComplete="new-password" />
+            <Label htmlFor="password">Contraseña</Label>
+            <Input id="password" type="password" minLength={16} value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="Mínimo 16 caracteres" required autoComplete="new-password" aria-describedby="registration-password-help" />
+            <p id="registration-password-help" className="text-xs text-muted-foreground">Incluye mayúscula, minúscula y número.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Telefono</Label>

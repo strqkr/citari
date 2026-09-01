@@ -4,6 +4,10 @@ export const endpoints = {
     changeInitialPassword: "/auth/password/change-initial",
     beginMfaEnrollment: "/auth/mfa/enroll",
     confirmMfaEnrollment: "/auth/mfa/confirm",
+    requestEmailVerification: "/auth/email/verification/request",
+    verifyEmail: "/auth/email/verify",
+    requestPasswordReset: "/auth/password/reset/request",
+    resetPassword: "/auth/password/reset",
     registerOwner: "/auth/register-owner",
     me: "/auth/me",
     logout: "/auth/logout"
