@@ -6,6 +6,60 @@ on:
   pull_request:
 
 jobs:
+  postgres-prisma-foundation:
+    name: PostgreSQL + Prisma foundation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: citari_admin
+          POSTGRES_PASSWORD: ci-only-not-production
+          POSTGRES_DB: citari
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U citari_admin -d citari"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api-next
+    env:
+      DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
+      BOOTSTRAP_DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable pinned pnpm
+        run: corepack enable
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate and generate Prisma Client
+        run: pnpm db:validate && pnpm db:generate
+
+      - name: Type-check bootstrap and Prisma integration
+        run: pnpm typecheck
+
+      - name: Apply migrations to an empty PostgreSQL database
+        run: pnpm db:migrate:deploy
+
+      - name: Prove idempotent superadmin bootstrap without demo data
+        run: |
+          printf '%s' 'CiTemporaryPassword2026A' | pnpm admin:bootstrap
+          printf '%s' 'CiTemporaryPassword2026A' | pnpm admin:bootstrap
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM users')" = "1"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM tenants')" = "0"
+
   lint-api:
     name: Lint API (ruff + mypy)
     runs-on: ubuntu-latest
