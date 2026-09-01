@@ -1,0 +1,30 @@
+{
+  "name": "citari",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.14.0",
+    "pnpm": "10.34.5"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @citari/api-next --filter @citari/frontend dev",
+    "build": "cross-env NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:coverage": "pnpm -r --if-present test:coverage",
+    "quality": "cross-env DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build?schema=public pnpm db:generate && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
+    "db:format": "pnpm --filter @citari/api-next db:format",
+    "db:validate": "pnpm --filter @citari/api-next db:validate",
+    "db:generate": "pnpm --filter @citari/api-next db:generate",
+    "db:migrate:deploy": "pnpm --filter @citari/api-next db:migrate:deploy",
+    "admin:bootstrap": "pnpm --filter @citari/api-next admin:bootstrap",
+    "infra:up": "docker compose up -d --wait postgres",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f postgres"
+  },
+  "devDependencies": {
+    "cross-env": "10.1.0"
+  }
+}

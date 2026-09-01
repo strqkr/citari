@@ -2,16 +2,15 @@
   "name": "@citari/frontend",
   "version": "0.1.0",
   "private": true,
-  "author": "Andrew Fuentes <andrew@euxora.net>",
   "packageManager": "pnpm@10.34.5",
-  "pnpm": {
-    "onlyBuiltDependencies": ["sharp", "unrs-resolver"]
-  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.2.8",
@@ -28,22 +27,30 @@
     "framer-motion": "^12.42.2",
     "gsap": "^3.15.0",
     "lucide-react": "^1.24.0",
-    "next": "latest",
-    "react": "latest",
+    "next": "16.3.4",
+    "react": "19.2.8",
     "react-day-picker": "^10.0.1",
-    "react-dom": "latest",
+    "react-dom": "19.2.8",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@types/node": "20.14.10",
-    "@types/react": "18.3.3",
-    "@types/react-dom": "18.3.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/jest-axe": "^3.5.9",
+    "@types/node": "24.3.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitest/coverage-v8": "^4.1.11",
     "autoprefixer": "^10.5.4",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
+    "eslint": "9.39.2",
+    "eslint-config-next": "16.3.4",
+    "jest-axe": "^11.0.0",
+    "jsdom": "^30.0.1",
     "postcss": "^8.5.19",
     "tailwindcss": "^3.4.19",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "5.5.3"
+    "typescript": "5.5.3",
+    "vitest": "^4.1.11"
   }
 }

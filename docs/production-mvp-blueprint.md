@@ -1,7 +1,7 @@
 # Citari production MVP blueprint
 
 Status: approved direction  
-Owner: Andrew Fuentes `<andrew@euxora.net>`  
+Owner: `strqkr`
 Target: production-ready multi-tenant booking platform  
 
 ## Product decision

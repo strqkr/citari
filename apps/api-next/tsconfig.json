@@ -9,7 +9,11 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "sourceMap": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "prisma.config.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "prisma.config.ts", "*.ts"]
 }

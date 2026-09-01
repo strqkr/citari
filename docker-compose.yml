@@ -1,136 +1,29 @@
 name: citari
 
 services:
-  # SQL Server database
-  db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    platform: linux/amd64
-    container_name: db
+  postgres:
+    image: postgres:17.6-bookworm
     environment:
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: ${SQLSERVER_PASSWORD:-YourStrong!Passw0rd}
-      MSSQL_PID: Developer
+      POSTGRES_DB: ${POSTGRES_DB:-citari}
+      POSTGRES_USER: ${POSTGRES_USER:-citari}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      # Host port to connect DataGrip/DBeaver/SSMS to the dockerized DB.
-      # Defaults to 11433 to avoid clashing with a local SQL Server on 1433.
-      - "${SQLSERVER_HOST_PORT:-11433}:1433"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      - sqlserver_data:/var/opt/mssql
-      - ./database/scripts:/scripts:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${SA_PASSWORD:-YourStrong!Passw0rd}\" -C -Q 'SELECT 1' || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
     networks:
-      - citari_network
-
-  # Loads the schema and seed data (once), if the database doesn't exist
-  # yet; does nothing if it's already loaded. Reuses the SQL Server image
-  # (already ships sqlcmd), so nothing extra is pulled.
-  db-init:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    platform: linux/amd64
-    container_name: db-init
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      SA_PASSWORD: ${SQLSERVER_PASSWORD:-YourStrong!Passw0rd}
-    volumes:
-      - ./database/scripts:/scripts:ro
-    entrypoint:
-      - bash
-      - -c
-      - |
-        set -e
-        ALREADY=$$(/opt/mssql-tools18/bin/sqlcmd -S db -U sa -P "$$SA_PASSWORD" -C -h -1 -W \
-          -Q "SET NOCOUNT ON; IF DB_ID('citari') IS NOT NULL AND OBJECT_ID('citari.dbo.tenants','U') IS NOT NULL SELECT 1 ELSE SELECT 0" \
-          | tr -d '[:space:]')
-        if [ "$$ALREADY" = "1" ]; then
-          echo "Database already initialized; skipping load."
-          exit 0
-        fi
-        echo "Running /scripts/citari.sql"
-        # -I turns on SET QUOTED_IDENTIFIER ON (required by the filtered
-        # index ux_bookings_availability_block; sqlcmd defaults it OFF).
-        /opt/mssql-tools18/bin/sqlcmd -S db -U sa -P "$$SA_PASSWORD" -C -b -I -i /scripts/citari.sql
-        echo "Database initialized (24 tables + seed + procedures/functions/views/triggers)."
-    restart: "no"
-    networks:
-      - citari_network
-
-  # FastAPI in DEVELOPMENT mode (hot reload). Code is bind-mounted from the
-  # host and --reload restarts uvicorn on save, no image rebuild needed. The
-  # editable install (-e, see Dockerfile) makes the installed "app" package
-  # point at this same bind mount. WATCHFILES_FORCE_POLLING: uvicorn's file
-  # watcher (watchfiles) needs polling to detect changes over Windows bind
-  # mounts, same as WATCHPACK_POLLING on the `web` service.
-  api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    container_name: api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app --no-access-log
-    environment:
-      SQLSERVER_HOST: db
-      SQLSERVER_PORT: 1433
-      SQLSERVER_USER: sa
-      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD:-YourStrong!Passw0rd}
-      SQLSERVER_DB: citari
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production-min-32-chars}
-      JWT_EXPIRES_MIN: ${JWT_EXPIRES_MIN:-60}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      LOG_FORMAT: ${LOG_FORMAT:-json}
-      WATCHFILES_FORCE_POLLING: "true"
-    volumes:
-      - ./apps/api/app:/app/app
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
-    ports:
-      - "${API_PORT:-8000}:8000"
-    networks:
-      - citari_network
-
-  # Next.js frontend in DEVELOPMENT mode (hot reload). Code is bind-mounted
-  # from the host, so changes show up live on localhost:3000 with no image
-  # rebuild. node_modules and .next live in named volumes (don't clash with
-  # the Windows host).
-  web:
-    image: node:22-bookworm-slim
-    container_name: web
-    working_dir: /app
-    # webpack (not turbopack): honors polling so hot reload works over
-    # Windows/Docker bind mounts.
-    command: sh -c "corepack enable && pnpm install && pnpm exec next dev --webpack -H 0.0.0.0 -p 3000"
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
-      # URL used by the Next SERVER (Server Components/SSR) inside the
-      # container: "localhost" there points at the `web` container itself,
-      # not `api`, hence the Docker service hostname.
-      API_INTERNAL_BASE_URL: http://api:8000
-      NEXT_PUBLIC_API_MODE: ${NEXT_PUBLIC_API_MODE:-api}
-      # Polling so hot reload detects changes over Windows bind mounts.
-      WATCHPACK_POLLING: "true"
-      CHOKIDAR_USEPOLLING: "true"
-    volumes:
-      - ./apps/frontend:/app
-      - web_node_modules:/app/node_modules
-      - web_next_cache:/app/.next
-    depends_on:
-      - api
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
-    networks:
-      - citari_network
+      - citari
 
 volumes:
-  sqlserver_data:
-  web_node_modules:
-  web_next_cache:
+  postgres_data:
 
 networks:
-  citari_network:
+  citari:
     driver: bridge

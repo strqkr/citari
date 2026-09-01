@@ -7,28 +7,29 @@
 # `web` de docker-compose.yml (bind mount + `next dev`), no esta imagen.
 
 # ----- builder -----
-FROM node:22-bookworm-slim AS builder
+FROM node:24.3.0-bookworm-slim AS builder
 WORKDIR /app
 RUN corepack enable
 
-# Dependencias primero (mejor cache): solo se reinstalan si cambian
-# package.json / lockfile.
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
+# El contexto es la raiz del workspace. Incluimos todos los manifests que
+# participan en el lockfile antes de instalar para conservar la cache.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/frontend/package.json ./apps/frontend/package.json
+COPY apps/api-next/package.json ./apps/api-next/package.json
+RUN pnpm install --frozen-lockfile --filter @citari/frontend...
 
-COPY . .
+COPY apps/frontend ./apps/frontend
+WORKDIR /app/apps/frontend
 
 # Los NEXT_PUBLIC_* se incrustan en el bundle al compilar, asi que deben estar
 # presentes ANTES de `pnpm build` (definirlos en `docker run` no tiene efecto).
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-ARG NEXT_PUBLIC_API_MODE=api
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
-ENV NEXT_PUBLIC_API_MODE=${NEXT_PUBLIC_API_MODE}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 # ----- runner -----
-FROM node:22-bookworm-slim AS runner
+FROM node:24.3.0-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -41,10 +42,13 @@ RUN groupadd --system --gid 1001 nodejs \
 
 # El output standalone trae su propio server.js + un node_modules minimo.
 # `public` y `.next/static` no van dentro de standalone: se copian aparte.
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/public ./apps/frontend/public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/frontend/.next/static ./apps/frontend/.next/static
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/frontend/server.js"]

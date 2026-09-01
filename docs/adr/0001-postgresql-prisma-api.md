@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-08-31
-- Owner: Andrew Fuentes `<andrew@euxora.net>`
+- Owner: `strqkr`
 
 ## Context
 
