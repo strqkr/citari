@@ -1,6 +1,9 @@
 export const endpoints = {
   auth: {
     login: "/auth/login",
+    changeInitialPassword: "/auth/password/change-initial",
+    beginMfaEnrollment: "/auth/mfa/enroll",
+    confirmMfaEnrollment: "/auth/mfa/confirm",
     registerOwner: "/auth/register-owner",
     me: "/auth/me",
     logout: "/auth/logout"

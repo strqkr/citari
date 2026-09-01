@@ -27,6 +27,13 @@ describe("backend session proxy", () => {
     expect(cookies).toContain("Max-Age=2592000");
   });
 
+  it("stores tokens only after the final MFA confirmation step", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ accessToken: "mfa-access", refreshToken: "mfa-refresh", tokenType: "Bearer", expiresIn: 900 })));
+    const response = await POST(request("auth/mfa/confirm", { method: "POST", body: JSON.stringify({ challengeToken: "challenge", code: "123456" }), headers: { "content-type": "application/json" } }), context(["auth", "mfa", "confirm"]));
+    expect(response.headers.getSetCookie().join(";")).toContain("citari_access=mfa-access");
+    expect(await response.json()).toEqual({ tokenType: "Bearer", expiresIn: 900 });
+  });
+
   it("rotates once after 401, updates cookies and retries with the new access token", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json({ status: 401 }, 401))

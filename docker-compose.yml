@@ -32,6 +32,7 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8000}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-citari-web}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY in .env}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"

@@ -22,6 +22,7 @@ version and `:latest`. Deploy immutable SHA or semantic-version tags.
 | `JWT_ISSUER` | Public HTTPS issuer URL |
 | `JWT_AUDIENCE` | Expected Citari web audience |
 | `JWT_SECRET` | At least 32 random bytes from a secret manager |
+| `MFA_ENCRYPTION_KEY` | Independent high-entropy secret used to encrypt TOTP material |
 | `CORS_ORIGINS` | Explicit comma-separated HTTPS frontend origins |
 | `HOST`, `PORT` | API listener, normally `0.0.0.0:8000` |
 | `API_INTERNAL_BASE_URL` | Server-side frontend route to the API |
@@ -35,11 +36,16 @@ GitHub Actions variable for the public environment.
 2. Run `prisma migrate deploy` using a short-lived migration credential.
 3. Bootstrap Andrew only on the first deployment, using a separate audited
    `BOOTSTRAP_DATABASE_URL` with the privileges required for bootstrap.
-4. Deploy the API by immutable tag and wait for `/api/v1/health/ready`.
-5. Deploy the frontend and run login, catalog, availability, booking, tracking,
+4. Complete Andrew's forced password change and MFA enrollment. Confirm that
+   both security audit events exist and that the temporary password no longer
+   authenticates before removing the bootstrap credential.
+5. Deploy the API by immutable tag and wait for `/api/v1/health/ready`.
+6. Deploy the frontend and run login, catalog, availability, booking, tracking,
    cancellation, rescheduling, and tenant-isolation smoke tests.
-6. Observe error rate, latency, database saturation, and booking failures before
+7. Observe error rate, latency, database saturation, and booking failures before
    promoting the release.
 
 The repository contains no seed data. Production credentials belong in the
 platform secret manager and must never be passed as command-line arguments.
+See `security.md` for key rotation constraints, the privileged login state
+machine, and the two-person break-glass MFA recovery procedure.

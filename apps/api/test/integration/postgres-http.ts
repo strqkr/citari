@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import request, { type Response } from "supertest";
 import { z } from "zod";
 import { createApplication } from "../../src/bootstrap.js";
+import { totpAt } from "../../src/auth/mfa.js";
 
 const tokensSchema = z.object({ accessToken: z.string(), refreshToken: z.string() });
 const registrationResponseSchema = z.object({ tenantId: z.uuid(), status: z.string() });
@@ -10,6 +11,8 @@ const profileSchema = z.object({ email: z.email(), tenantRole: z.string().nullab
 const categorySchema = z.object({ id: z.uuid() });
 const problemSchema = z.object({ status: z.number() });
 const readySchema = z.object({ status: z.literal("ready") });
+const challengeSchema = z.object({ challengeToken: z.string(), status: z.string() });
+const enrollmentSchema = challengeSchema.extend({ secret: z.string(), otpAuthUri: z.string() });
 
 const registration = (suffix: string) => ({
   businessName: `QA Business ${suffix}`,
@@ -47,7 +50,17 @@ async function main(): Promise<void> {
     const secondRegistration = registrationResponseSchema.parse(status(await http.post("/api/v1/auth/register-owner").send(second), 201).body);
     assert.equal(firstRegistration.status, "PENDING_VERIFICATION");
 
-    const adminLogin = tokensSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: "andrew@euxora.net", password: superadminPassword }), 200).body);
+    const passwordChallenge = challengeSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: "andrew@euxora.net", password: superadminPassword }), 200).body);
+    assert.equal(passwordChallenge.status, "PASSWORD_CHANGE_REQUIRED");
+    const permanentPassword = "CiPermanentPassword2026B";
+    const mfaChallenge = challengeSchema.parse(status(await http.post("/api/v1/auth/password/change-initial").send({ challengeToken: passwordChallenge.challengeToken, newPassword: permanentPassword }), 200).body);
+    assert.equal(mfaChallenge.status, "MFA_ENROLLMENT_REQUIRED");
+    const enrollment = enrollmentSchema.parse(status(await http.post("/api/v1/auth/mfa/enroll").send({ challengeToken: mfaChallenge.challengeToken }), 200).body);
+    assert.equal(enrollment.status, "MFA_CONFIRMATION_REQUIRED");
+    assert.match(enrollment.otpAuthUri, /^otpauth:\/\/totp\//);
+    const mfaCode = totpAt(enrollment.secret, Math.floor(Date.now() / 30_000));
+    const adminLogin = tokensSchema.parse(status(await http.post("/api/v1/auth/mfa/confirm").send({ challengeToken: enrollment.challengeToken, code: mfaCode }), 200).body);
+    status(await http.post("/api/v1/auth/login").send({ email: "andrew@euxora.net", password: permanentPassword, mfaCode }), 401);
     const adminAuthorization = `Bearer ${adminLogin.accessToken}`;
     for (const tenantId of [firstRegistration.tenantId, secondRegistration.tenantId]) {
       status(await http

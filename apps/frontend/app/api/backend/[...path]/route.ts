@@ -83,7 +83,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     }
 
     let upstream = await callUpstream(upstreamUrl(path, request.nextUrl.searchParams), request.method, originalBody, contentType, accessToken, idempotencyKey);
-    if (route === "auth/login") {
+    if (["auth/login", "auth/password/change-initial", "auth/mfa/confirm"].includes(route)) {
       const pair = await readTokenPair(upstream);
       if (!pair) return toNextResponse(upstream);
       const response = NextResponse.json({ tokenType: pair.tokenType, expiresIn: pair.expiresIn }, { status: upstream.status });

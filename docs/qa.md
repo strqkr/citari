@@ -6,10 +6,11 @@ and both production Docker builds.
 
 The PostgreSQL HTTP smoke test starts the actual NestJS/Fastify application and
 verifies readiness, RFC 7807 validation, owner registration, superadmin tenant
-activation, owner authentication, authenticated profile access, a real catalog
-write, cross-tenant mutation denial, refresh-token rotation, reuse detection,
-and family revocation. It uses unique records in the disposable CI database and
-does not depend on fixtures or seed data.
+activation, the mandatory superadmin password change and MFA enrollment, TOTP
+replay denial, owner authentication, authenticated profile access, a real
+catalog write, cross-tenant mutation denial, refresh-token rotation, reuse
+detection, and family revocation. It uses unique records in the disposable CI
+database and does not depend on fixtures or seed data.
 
 Unit tests remain responsible for edge cases and deterministic branch coverage.
 The integration gate is intentionally small and high-value; staging release

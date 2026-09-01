@@ -38,6 +38,12 @@ enum ContactKind {
   PHONE
 }
 
+enum AuthChallengePurpose {
+  PASSWORD_CHANGE
+  MFA_ENROLL
+  MFA_CONFIRM
+}
+
 model User {
   id                     String             @id @default(uuid()) @db.Uuid
   email                  String             @unique @db.VarChar(254)
@@ -48,15 +54,33 @@ model User {
   passwordChangeRequired Boolean            @default(true)
   mfaRequired            Boolean            @default(false)
   mfaEnrolledAt          DateTime?          @db.Timestamptz(3)
+  mfaSecretEncrypted     String?            @db.VarChar(512)
+  mfaLastUsedStep        BigInt?
   globalRole             GlobalRole?
   isActive               Boolean            @default(true)
   createdAt              DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt              DateTime           @updatedAt @db.Timestamptz(3)
   memberships            TenantMembership[]
   sessions               Session[]
+  authChallenges         AuthChallenge[]
   auditEvents            AuditEvent[]       @relation("AuditActor")
 
   @@map("users")
+}
+
+model AuthChallenge {
+  id         String               @id @default(uuid()) @db.Uuid
+  tokenHash  String               @unique @db.Char(64)
+  userId     String               @db.Uuid
+  tenantId   String?              @db.Uuid
+  purpose    AuthChallengePurpose
+  expiresAt  DateTime             @db.Timestamptz(3)
+  consumedAt DateTime?            @db.Timestamptz(3)
+  createdAt  DateTime             @default(now()) @db.Timestamptz(3)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, consumedAt, expiresAt])
+  @@map("auth_challenges")
 }
 
 model Session {
