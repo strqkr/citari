@@ -10,6 +10,7 @@
     "start:dev": "tsx watch src/main.ts",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
+    "test:integration": "tsc -p tsconfig.integration.json && node dist-integration/test/integration/postgres-http.js",
     "test:coverage": "vitest run --coverage",
     "db:format": "prisma format",
     "db:validate": "prisma validate",

@@ -58,22 +58,30 @@ export class AuthService {
   }
   async refresh(rawToken: string, client: ClientContext): Promise<TokenPair> {
     const tokenHash = digest(rawToken);
-    return this.prisma.$transaction(async (tx) => {
+    const tokens = await this.prisma.$transaction(async (tx) => {
       const session = await tx.session.findUnique({ where: { refreshTokenHash: tokenHash }, include: { user: true } });
       if (!session || session.revokedAt || session.expiresAt <= new Date() || !session.user.isActive) {
         if (session) await tx.session.updateMany({ where: { familyId: session.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
-        throw new UnauthorizedException("Refresh token is invalid or expired");
+        return null;
       }
       const revoked = await tx.session.updateMany({ where: { id: session.id, revokedAt: null }, data: { revokedAt: new Date(), lastUsedAt: new Date() } });
-      if (revoked.count !== 1) { await tx.session.updateMany({ where: { familyId: session.familyId, revokedAt: null }, data: { revokedAt: new Date() } }); throw new UnauthorizedException("Refresh token reuse detected"); }
+      if (revoked.count !== 1) {
+        await tx.session.updateMany({ where: { familyId: session.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+        return null;
+      }
       const sessionTenantId = session.tenantId;
       const membership = sessionTenantId ? await (async () => {
         await tx.$executeRaw`SELECT set_config('app.tenant_id', ${sessionTenantId}, true)`;
         return tx.tenantMembership.findFirst({ where: { userId: session.userId, tenantId: sessionTenantId, tenant: { status: "ACTIVE" } } });
       })() : null;
-      if (sessionTenantId && !membership) throw new UnauthorizedException("Tenant access is unavailable");
+      if (sessionTenantId && !membership) {
+        await tx.session.updateMany({ where: { familyId: session.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+        return null;
+      }
       return this.issue(session.userId, session.user.globalRole ?? undefined, membership?.tenantId, membership?.role, session.familyId, client, tx);
     });
+    if (!tokens) throw new UnauthorizedException("Refresh token is invalid or expired");
+    return tokens;
   }
   async logout(rawToken: string): Promise<void> { await this.prisma.session.updateMany({ where: { refreshTokenHash: digest(rawToken), revokedAt: null }, data: { revokedAt: new Date() } }); }
   async getProfile(userId: string, tenantId?: string) {
