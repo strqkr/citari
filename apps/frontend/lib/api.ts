@@ -1,6 +1,5 @@
 import { frontendConfig } from "@/lib/frontend-config";
 
-const API_MODE = frontendConfig.apiMode;
 const API_PREFIX = "/api/v1";
 
 // Browser fetches (client components) need the host-published URL; Next.js
@@ -12,7 +11,7 @@ function apiBaseUrl(): string {
 const TOKEN_STORAGE_KEY = "citari_token";
 
 export function isMockMode() {
-  return API_MODE !== "api";
+  return false;
 }
 
 /**
@@ -58,10 +57,6 @@ function isProblemDetail(value: unknown): value is { type?: string; title?: stri
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  if (isMockMode()) {
-    throw new Error("API disabled in mock mode");
-  }
-
   const headers: Record<string, string> = {};
   const token = getAuthToken();
   if (token) {

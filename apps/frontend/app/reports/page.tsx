@@ -20,35 +20,22 @@ type AvailabilityStatus = {
   isReserved: boolean;
 };
 
-const mockDashboard: Dashboard = { totalBookings: 143, totalCustomers: 248, totalActiveServices: 18, totalActiveLocations: 2 };
-const mockDemand: ServiceDemand[] = [
-  { serviceId: 1, serviceName: "Limpieza dental", totalBookings: 42, lastBookingAt: "2026-05-19" },
-  { serviceId: 2, serviceName: "Consulta odontologica", totalBookings: 28, lastBookingAt: "2026-05-18" },
-  { serviceId: 3, serviceName: "Blanqueamiento dental", totalBookings: 21, lastBookingAt: "2026-05-15" }
-];
-const mockAvailability: AvailabilityStatus[] = [
-  { availabilityBlockId: 1, locationName: "Sede central", blockDate: "2026-05-20", startTime: "09:00", endTime: "09:30", isReserved: false },
-  { availabilityBlockId: 2, locationName: "Sede central", blockDate: "2026-05-20", startTime: "11:00", endTime: "11:30", isReserved: false },
-  { availabilityBlockId: 3, locationName: "Sede central", blockDate: "2026-05-20", startTime: "14:00", endTime: "14:30", isReserved: true }
-];
-
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
 export default function ReportsPage() {
-  const { data: summary, loading } = useResourceOne<Dashboard>(endpoints.reports.dashboard, mockDashboard);
-  const { items: demand } = useResource<ServiceDemand>(endpoints.reports.servicesDemand, mockDemand);
+  const { data: summary, loading } = useResourceOne<Dashboard>(endpoints.reports.dashboard);
+  const { items: demand } = useResource<ServiceDemand>(endpoints.reports.servicesDemand);
   const { items: availability } = useResource<AvailabilityStatus>(
-    `${endpoints.reports.availabilityStatus}?date=${todayIso()}`,
-    mockAvailability
+    `${endpoints.reports.availabilityStatus}?date=${todayIso()}`
   );
 
   const kpis = [
-    { label: "Reservas totales", value: summary.totalBookings, helper: "acumuladas", icon: BarChart3 },
-    { label: "Clientes", value: summary.totalCustomers, helper: "con historial", icon: Users },
-    { label: "Servicios activos", value: summary.totalActiveServices, helper: "publicados", icon: CalendarClock },
-    { label: "Sedes activas", value: summary.totalActiveLocations, helper: "operando", icon: MapPin }
+    { label: "Reservas totales", value: summary?.totalBookings ?? 0, helper: "acumuladas", icon: BarChart3 },
+    { label: "Clientes", value: summary?.totalCustomers ?? 0, helper: "con historial", icon: Users },
+    { label: "Servicios activos", value: summary?.totalActiveServices ?? 0, helper: "publicados", icon: CalendarClock },
+    { label: "Sedes activas", value: summary?.totalActiveLocations ?? 0, helper: "operando", icon: MapPin }
   ];
 
   return (
