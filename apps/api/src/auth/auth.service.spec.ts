@@ -6,8 +6,8 @@ import { encryptMfaSecret, totpAt } from "./mfa.js";
 vi.mock("argon2", () => ({ hash: vi.fn(), verify: vi.fn() }));
 const env = { JWT_SECRET: "s".repeat(32), JWT_ISSUER: "https://issuer.test", JWT_AUDIENCE: "citari", MFA_ENCRYPTION_KEY: "m".repeat(32) } as never;
 describe("AuthService", () => {
-  let prisma: any; let service: AuthService;
-  beforeEach(() => { prisma = { user: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, tenant: { findUnique: vi.fn(), create: vi.fn() }, tenantMembership: { create: vi.fn(), findFirst: vi.fn() }, tenantContact: { createMany: vi.fn() }, auditEvent: { create: vi.fn() }, authChallenge: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() }, session: { create: vi.fn().mockResolvedValue({}), findUnique: vi.fn(), updateMany: vi.fn() }, $executeRaw: vi.fn(), withTenant: vi.fn((_tenantId, fn) => fn(prisma)), $transaction: vi.fn((fn) => fn(prisma)) }; service = new AuthService(prisma, env); vi.mocked(hash).mockResolvedValue("argon-hash"); vi.mocked(verify).mockResolvedValue(true); prisma.authChallenge.updateMany.mockResolvedValue({ count: 1 }); prisma.user.updateMany.mockResolvedValue({ count: 1 }); });
+  let prisma: any; let service: AuthService; let notifications: { enqueue: ReturnType<typeof vi.fn> }; let abuse: { assertAllowed: ReturnType<typeof vi.fn>; consume: ReturnType<typeof vi.fn>; reset: ReturnType<typeof vi.fn> };
+  beforeEach(() => { prisma = { user: { findUnique: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() }, tenant: { findUnique: vi.fn(), create: vi.fn() }, tenantMembership: { create: vi.fn(), findFirst: vi.fn() }, tenantContact: { createMany: vi.fn(), updateMany: vi.fn() }, auditEvent: { create: vi.fn() }, authChallenge: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() }, session: { create: vi.fn().mockResolvedValue({}), findUnique: vi.fn(), updateMany: vi.fn() }, $executeRaw: vi.fn(), withTenant: vi.fn((_tenantId, fn) => fn(prisma)), $transaction: vi.fn((fn) => fn(prisma)) }; notifications = { enqueue: vi.fn() }; abuse = { assertAllowed: vi.fn(), consume: vi.fn().mockResolvedValue(true), reset: vi.fn() }; service = new AuthService(prisma, env, notifications as never, abuse as never); vi.mocked(hash).mockResolvedValue("argon-hash"); vi.mocked(verify).mockResolvedValue(true); prisma.authChallenge.updateMany.mockResolvedValue({ count: 1 }); prisma.user.updateMany.mockResolvedValue({ count: 1 }); });
   it("registers a pending tenant owner atomically without demo data", async () => {
     prisma.user.findUnique.mockResolvedValue(null); prisma.tenant.findUnique.mockResolvedValue(null);
     prisma.tenant.create.mockResolvedValue({ id: "t", status: "PENDING_VERIFICATION" }); prisma.user.create.mockResolvedValue({ id: "u" });
@@ -16,20 +16,21 @@ describe("AuthService", () => {
     expect(prisma.user.create).toHaveBeenCalledWith({ data: expect.objectContaining({ email: "ana@test.co", passwordHash: "argon-hash" }) });
     expect(prisma.tenantMembership.create).toHaveBeenCalledWith({ data: { tenantId: "t", userId: "u", role: "OWNER" } });
     expect(prisma.tenantContact.createMany).toHaveBeenCalledWith({ data: expect.arrayContaining([expect.objectContaining({ kind: "EMAIL", value: "info@test.co" }), expect.objectContaining({ kind: "PHONE" })]) });
+    expect(notifications.enqueue).toHaveBeenCalledWith(prisma, "u", "ana@test.co", "EMAIL_VERIFICATION", expect.any(String));
   });
   it("rejects an existing registration identity", async () => {
     prisma.user.findUnique.mockResolvedValue({ id: "u" }); prisma.tenant.findUnique.mockResolvedValue(null);
     await expect(service.registerOwner({ businessName: "Test", slug: "test", businessEmail: "info@test.co", ownerFirstName: "Ana", ownerLastName: "Diaz", ownerEmail: "ana@test.co", password: "StrongPassword2026" })).rejects.toBeInstanceOf(ConflictException);
   });
   it("normalizes credentials, selects membership and creates a hashed session", async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: "u", isActive: true, passwordHash: "hash", globalRole: null }); prisma.tenantMembership.findFirst.mockResolvedValue({ tenantId: "t", role: "OWNER" });
+    prisma.user.findUnique.mockResolvedValue({ id: "u", isActive: true, passwordHash: "hash", globalRole: null, emailVerifiedAt: new Date() }); prisma.tenantMembership.findFirst.mockResolvedValue({ tenantId: "t", role: "OWNER" });
     const pair = await service.login(" USER@EXAMPLE.COM ", "password", "t", { ip: "127.0.0.1", userAgent: "test" });
     expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { email: "user@example.com" } }));
     expect(prisma.session.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: "u", familyId: expect.any(String), refreshTokenHash: expect.stringMatching(/^[a-f0-9]{64}$/), ipHash: expect.stringMatching(/^[a-f0-9]{64}$/) }) });
     expect(pair).toMatchObject({ tokenType: "Bearer", expiresIn: 900 }); expect("accessToken" in pair && pair.accessToken.split(".")).toHaveLength(3);
   });
   it("uses one indistinguishable authentication error and a dummy hash for unknown users", async () => { prisma.user.findUnique.mockResolvedValue(null); await expect(service.login("x@y.com", "password", undefined, {})).rejects.toBeInstanceOf(UnauthorizedException); expect(verify).toHaveBeenCalledWith(expect.stringMatching(/^\$argon2id\$/), "password"); });
-  it("rejects a tenant the user does not belong to", async () => { prisma.user.findUnique.mockResolvedValue({ id: "u", isActive: true, passwordHash: "h", globalRole: null }); prisma.tenantMembership.findFirst.mockResolvedValue(null); await expect(service.login("x@y.com", "password", "t", {})).rejects.toBeInstanceOf(UnauthorizedException); });
+  it("rejects a tenant the user does not belong to", async () => { prisma.user.findUnique.mockResolvedValue({ id: "u", isActive: true, passwordHash: "h", globalRole: null, emailVerifiedAt: new Date() }); prisma.tenantMembership.findFirst.mockResolvedValue(null); await expect(service.login("x@y.com", "password", "t", {})).rejects.toBeInstanceOf(UnauthorizedException); });
   it("issues only a hashed password-change challenge for first superadmin access", async () => {
     prisma.user.findUnique.mockResolvedValue({ id: "u", isActive: true, passwordHash: "h", globalRole: "SUPER_ADMIN", emailVerifiedAt: new Date(), passwordChangeRequired: true, mfaRequired: true });
     const result = await service.login("andrew@example.com", "temporary", undefined, {});
@@ -82,6 +83,39 @@ describe("AuthService", () => {
     await expect(service.beginMfaEnrollment("x".repeat(43))).rejects.toBeInstanceOf(UnauthorizedException);
   });
   it("revokes a refresh token idempotently on logout", async () => { prisma.session.updateMany.mockResolvedValue({ count: 1 }); await service.logout("x".repeat(32)); expect(prisma.session.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { revokedAt: expect.any(Date) } })); });
+  it("queues verification and reset emails with identical public responses", async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: "u", email: "owner@example.com", isActive: true, emailVerifiedAt: null });
+    prisma.tenantMembership.findFirst.mockResolvedValue({ tenantId: "t" });
+    await expect(service.requestEmailVerification(" OWNER@EXAMPLE.COM ")).resolves.toEqual({ accepted: true });
+    await expect(service.requestPasswordReset(" OWNER@EXAMPLE.COM ")).resolves.toEqual({ accepted: true });
+    expect(notifications.enqueue).toHaveBeenCalledWith(prisma, "u", "owner@example.com", "EMAIL_VERIFICATION", expect.any(String));
+    expect(notifications.enqueue).toHaveBeenCalledWith(prisma, "u", "owner@example.com", "PASSWORD_RESET", expect.any(String));
+  });
+  it("does not disclose whether an email identity exists", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    await expect(service.requestPasswordReset("missing@example.com")).resolves.toEqual({ accepted: true });
+    expect(notifications.enqueue).not.toHaveBeenCalled();
+  });
+  it("silently suppresses account-targeted recovery floods", async () => {
+    abuse.consume.mockResolvedValue(false);
+    await expect(service.requestPasswordReset("owner@example.com", { ip: "127.0.0.1" })).resolves.toEqual({ accepted: true });
+    expect(notifications.enqueue).not.toHaveBeenCalled();
+  });
+  it("verifies the user and tenant email from a single-use challenge", async () => {
+    prisma.authChallenge.findUnique.mockResolvedValue({ id: "c", userId: "u", tenantId: "t", purpose: "EMAIL_VERIFY", consumedAt: null, expiresAt: new Date(Date.now() + 60_000), user: { id: "u", email: "owner@example.com", emailVerifiedAt: null, isActive: true } });
+    await expect(service.verifyEmail("x".repeat(43))).resolves.toEqual({ verified: true });
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "u" }, data: { emailVerifiedAt: expect.any(Date) } });
+    expect(prisma.tenantContact.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { verifiedAt: expect.any(Date) } }));
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "EMAIL_VERIFIED" }) });
+  });
+  it("resets the password, revokes sessions, and leaves MFA requirements intact", async () => {
+    vi.mocked(verify).mockResolvedValue(false);
+    prisma.authChallenge.findUnique.mockResolvedValue({ id: "c", userId: "u", tenantId: null, purpose: "PASSWORD_RESET", consumedAt: null, expiresAt: new Date(Date.now() + 60_000), user: { id: "u", email: "andrew@example.com", passwordHash: "old", isActive: true } });
+    await expect(service.resetPassword("x".repeat(43), "PermanentPassword2027")).resolves.toEqual({ reset: true });
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "u" }, data: { passwordHash: "argon-hash", passwordChangeRequired: false } });
+    expect(prisma.session.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "u", revokedAt: null } }));
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: "PASSWORD_RESET_COMPLETED" }) });
+  });
   it("returns a production profile and active tenant role", async () => { prisma.user.findFirst.mockResolvedValue({ id: "u", email: "a@b.co" }); prisma.tenantMembership.findFirst.mockResolvedValue({ tenantId: "t", role: "OWNER" }); await expect(service.getProfile("u", "t")).resolves.toMatchObject({ id: "u", tenantId: "t", tenantRole: "OWNER" }); });
   it("rejects a deleted or disabled profile", async () => { prisma.user.findFirst.mockResolvedValue(null); await expect(service.getProfile("u")).rejects.toBeInstanceOf(UnauthorizedException); });
   it("rotates a valid refresh token atomically", async () => {

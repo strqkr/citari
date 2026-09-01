@@ -42,6 +42,13 @@ enum AuthChallengePurpose {
   PASSWORD_CHANGE
   MFA_ENROLL
   MFA_CONFIRM
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum NotificationTemplate {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 model User {
@@ -63,9 +70,44 @@ model User {
   memberships            TenantMembership[]
   sessions               Session[]
   authChallenges         AuthChallenge[]
+  emailDeliveries        EmailDelivery[]
   auditEvents            AuditEvent[]       @relation("AuditActor")
 
   @@map("users")
+}
+
+model EmailDelivery {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @db.Uuid
+  recipient        String               @db.VarChar(254)
+  template         NotificationTemplate
+  payloadEncrypted String
+  attempts         Int                  @default(0)
+  availableAt      DateTime             @default(now()) @db.Timestamptz(3)
+  lockedAt         DateTime?            @db.Timestamptz(3)
+  sentAt           DateTime?            @db.Timestamptz(3)
+  lastError        String?              @db.VarChar(500)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt, availableAt, lockedAt])
+  @@index([userId, createdAt])
+  @@map("email_deliveries")
+}
+
+model RateLimitBucket {
+  scope        String    @db.VarChar(100)
+  keyHash      String    @db.Char(64)
+  windowStart  DateTime  @db.Timestamptz(3)
+  count        Int       @default(0)
+  penaltyLevel Int       @default(0)
+  blockedUntil DateTime? @db.Timestamptz(3)
+  expiresAt    DateTime  @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@id([scope, keyHash])
+  @@index([expiresAt])
+  @@map("rate_limit_buckets")
 }
 
 model AuthChallenge {

@@ -28,11 +28,21 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 8000
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
       DATABASE_URL: postgresql://${POSTGRES_USER:-citari}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-citari}?schema=public
       JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8000}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-citari-web}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY in .env}
+      NOTIFICATION_ENCRYPTION_KEY: ${NOTIFICATION_ENCRYPTION_KEY:?Set NOTIFICATION_ENCRYPTION_KEY in .env}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-disabled}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8000}:8000"

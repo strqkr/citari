@@ -149,6 +149,7 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
               <Input id="password" type="password" placeholder="Tu contraseña" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" />
+              <div className="text-right"><Link href="/forgot-password" className="text-xs font-semibold text-primary hover:underline">¿Olvidaste tu contraseña?</Link></div>
             </div>
           </> : <div className="space-y-2">
             <Label htmlFor="mfa-code">Código de seguridad</Label>

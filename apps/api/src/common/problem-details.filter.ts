@@ -1,5 +1,6 @@
 import { ArgumentsHost, Catch, HttpException, HttpStatus, type ExceptionFilter } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { RateLimitExceededException } from "../security/abuse-protection.service.js";
 
 interface ErrorBody { message?: string | string[]; error?: string }
 @Catch()
@@ -13,6 +14,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const body = typeof response === "object" ? response as ErrorBody : undefined;
     const rawDetail = body?.message;
     const detail = status >= 500 ? "An unexpected error occurred." : Array.isArray(rawDetail) ? rawDetail.join("; ") : rawDetail ?? "Request failed.";
+    if (exception instanceof RateLimitExceededException) reply.header("Retry-After", String(exception.retryAfterSeconds));
     reply.status(status).type("application/problem+json").send({
       type: `https://api.citari.app/problems/http-${String(status)}`,
       title: body?.error ?? (status >= 500 ? "Internal Server Error" : "Request Error"),

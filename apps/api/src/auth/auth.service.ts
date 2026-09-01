@@ -4,12 +4,14 @@ import { hash, verify } from "argon2";
 import { SignJWT } from "jose";
 import { ENVIRONMENT, type Environment } from "../config/environment.js";
 import { PrismaService, type TransactionClient } from "../database/prisma.service.js";
+import { NotificationOutboxService } from "../notifications/notification-outbox.service.js";
+import { AbuseProtectionService } from "../security/abuse-protection.service.js";
 import type { RegisterOwnerDto } from "./auth.dto.js";
 import { buildOtpAuthUri, decryptMfaSecret, encryptMfaSecret, generateMfaSecret, verifyTotpStep } from "./mfa.js";
 
 interface ClientContext { ip?: string | undefined; userAgent?: string | undefined }
 export interface TokenPair { accessToken: string; refreshToken: string; tokenType: "Bearer"; expiresIn: number }
-type ChallengePurpose = "PASSWORD_CHANGE" | "MFA_ENROLL" | "MFA_CONFIRM";
+type ChallengePurpose = "PASSWORD_CHANGE" | "MFA_ENROLL" | "MFA_CONFIRM" | "EMAIL_VERIFY" | "PASSWORD_RESET";
 type IssuedChallenge =
   | { status: "PASSWORD_CHANGE_REQUIRED"; challengeToken: string; expiresIn: number }
   | { status: "MFA_ENROLLMENT_REQUIRED"; challengeToken: string; expiresIn: number };
@@ -22,6 +24,8 @@ export type AuthResult = TokenPair | AuthStep;
 const ACCESS_TTL_SECONDS = 900;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_SECONDS = 10 * 60;
+const EMAIL_VERIFICATION_TTL_SECONDS = 24 * 60 * 60;
+const PASSWORD_RESET_TTL_SECONDS = 30 * 60;
 const DUMMY_PASSWORD_HASH = "$argon2id$v=19$m=65536,p=1,t=3$Brd4ak0RFm+6Bw2wqWxNkg$YQrbTLW1M+sHBxBxl0oXDZzFmWaAZfc/sT/Gh0dycRE";
 const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
@@ -29,11 +33,12 @@ const digest = (value: string): string => createHash("sha256").update(value).dig
 export class AuthService {
   private readonly key: Uint8Array;
 
-  constructor(private readonly prisma: PrismaService, @Inject(ENVIRONMENT) private readonly env: Environment) {
+  constructor(private readonly prisma: PrismaService, @Inject(ENVIRONMENT) private readonly env: Environment, private readonly notifications: NotificationOutboxService, private readonly abuse: AbuseProtectionService) {
     this.key = new TextEncoder().encode(env.JWT_SECRET);
   }
 
-  async registerOwner(input: RegisterOwnerDto) {
+  async registerOwner(input: RegisterOwnerDto, client: ClientContext = {}) {
+    await this.abuse.assertAllowed("auth.registration.ip", client.ip ?? "unknown", 5, 60 * 60, 15 * 60);
     const email = input.ownerEmail.trim().toLowerCase();
     const slug = input.slug.trim().toLowerCase();
     const [existingUser, existingTenant] = await Promise.all([
@@ -60,17 +65,25 @@ export class AuthService {
         ...(input.phone ? [{ tenantId: tenant.id, kind: "PHONE" as const, value: input.phone.trim(), isPrimary: true }] : [])
       ] });
       await tx.auditEvent.create({ data: { tenantId: tenant.id, actorUserId: user.id, action: "TENANT_REGISTRATION_SUBMITTED", entityType: "Tenant", entityId: tenant.id } });
+      const verification = await this.createOpaqueChallengeInTransaction(tx, user.id, tenant.id, "EMAIL_VERIFY", EMAIL_VERIFICATION_TTL_SECONDS);
+      await this.notifications.enqueue(tx, user.id, email, "EMAIL_VERIFICATION", verification.challengeToken);
       return { tenantId: tenant.id, userId: user.id, status: tenant.status };
     });
   }
 
   async login(email: string, password: string, tenantId: string | undefined, client: ClientContext, mfaCode?: string): Promise<AuthResult> {
-    const user = await this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    const normalizedEmail = email.trim().toLowerCase();
+    await Promise.all([
+      this.abuse.assertAllowed("auth.login.ip", client.ip ?? "unknown", 60, 15 * 60, 60),
+      this.abuse.assertAllowed("auth.login.account", normalizedEmail, 8, 15 * 60, 5 * 60)
+    ]);
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     const passwordMatches = await verify(user?.passwordHash ?? DUMMY_PASSWORD_HASH, password);
     if (!user?.isActive || !user.passwordHash || !passwordMatches) {
       throw new UnauthorizedException("Invalid email or password");
     }
-    if (user.globalRole === "SUPER_ADMIN" && !user.emailVerifiedAt) {
+    await this.abuse.reset("auth.login.account", normalizedEmail);
+    if (!user.emailVerifiedAt) {
       throw new ForbiddenException("Email verification is required");
     }
 
@@ -97,6 +110,7 @@ export class AuthService {
   }
 
   async changeInitialPassword(challengeToken: string, newPassword: string, client: ClientContext): Promise<AuthResult> {
+    await this.protectChallenge("password-change", challengeToken, client);
     const passwordHash = await this.hashPassword(newPassword);
     return this.prisma.$transaction(async (tx) => {
       const challenge = await this.consumeChallenge(tx, challengeToken, "PASSWORD_CHANGE");
@@ -112,7 +126,8 @@ export class AuthService {
     });
   }
 
-  async beginMfaEnrollment(challengeToken: string): Promise<AuthStep> {
+  async beginMfaEnrollment(challengeToken: string, client: ClientContext = {}): Promise<AuthStep> {
+    await this.protectChallenge("mfa-enrollment", challengeToken, client);
     return this.prisma.$transaction(async (tx) => {
       const challenge = await this.consumeChallenge(tx, challengeToken, "MFA_ENROLL");
       if (!challenge.user.mfaRequired) throw new ForbiddenException("Multi-factor enrollment is unavailable");
@@ -127,6 +142,7 @@ export class AuthService {
   }
 
   async confirmMfaEnrollment(challengeToken: string, code: string, client: ClientContext): Promise<TokenPair> {
+    await this.protectChallenge("mfa-confirmation", challengeToken, client);
     return this.prisma.$transaction(async (tx) => {
       const challenge = await this.consumeChallenge(tx, challengeToken, "MFA_CONFIRM");
       if (!challenge.user.mfaRequired || !challenge.user.mfaSecretEncrypted) throw new ForbiddenException("Multi-factor enrollment is unavailable");
@@ -138,6 +154,53 @@ export class AuthService {
       const context = await this.resolveAccessContext(tx, challenge.userId, challenge.user.globalRole ?? undefined, challenge.tenantId ?? undefined);
       return this.issue(challenge.userId, challenge.user.globalRole ?? undefined, context.tenantId, context.tenantRole, randomUUID(), client, tx, true);
     });
+  }
+
+  async requestEmailVerification(email: string, client: ClientContext = {}): Promise<{ accepted: true }> {
+    await this.abuse.assertAllowed("auth.email-verification.ip", client.ip ?? "unknown", 10, 60 * 60, 15 * 60);
+    if (!await this.abuse.consume("auth.email-verification.account", email, 3, 60 * 60, 60 * 60)) return { accepted: true };
+    await this.queueIdentityEmail(email, "EMAIL_VERIFY", "EMAIL_VERIFICATION", EMAIL_VERIFICATION_TTL_SECONDS, (user) => !user.emailVerifiedAt);
+    return { accepted: true };
+  }
+
+  async verifyEmail(challengeToken: string, client: ClientContext = {}): Promise<{ verified: true }> {
+    await this.protectChallenge("email-verification", challengeToken, client);
+    return this.prisma.$transaction(async (tx) => {
+      const challenge = await this.consumeChallenge(tx, challengeToken, "EMAIL_VERIFY");
+      await tx.user.update({ where: { id: challenge.userId }, data: { emailVerifiedAt: challenge.user.emailVerifiedAt ?? new Date() } });
+      await tx.authChallenge.updateMany({ where: { userId: challenge.userId, purpose: "EMAIL_VERIFY", consumedAt: null }, data: { consumedAt: new Date() } });
+      if (challenge.tenantId) {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${challenge.tenantId}, true)`;
+        await tx.tenantContact.updateMany({ where: { tenantId: challenge.tenantId, kind: "EMAIL", value: challenge.user.email }, data: { verifiedAt: new Date() } });
+      }
+      await this.recordSecurityEvent(tx, challenge.userId, challenge.tenantId, "EMAIL_VERIFIED");
+      return { verified: true };
+    });
+  }
+
+  async requestPasswordReset(email: string, client: ClientContext = {}): Promise<{ accepted: true }> {
+    await this.abuse.assertAllowed("auth.password-reset.ip", client.ip ?? "unknown", 10, 60 * 60, 15 * 60);
+    if (!await this.abuse.consume("auth.password-reset.account", email, 3, 60 * 60, 60 * 60)) return { accepted: true };
+    await this.queueIdentityEmail(email, "PASSWORD_RESET", "PASSWORD_RESET", PASSWORD_RESET_TTL_SECONDS, () => true);
+    return { accepted: true };
+  }
+
+  async resetPassword(challengeToken: string, newPassword: string, client: ClientContext = {}): Promise<{ reset: true }> {
+    await this.protectChallenge("password-reset-completion", challengeToken, client);
+    const passwordHash = await this.hashPassword(newPassword);
+    const email = await this.prisma.$transaction(async (tx) => {
+      const challenge = await this.consumeChallenge(tx, challengeToken, "PASSWORD_RESET");
+      if (challenge.user.passwordHash && await verify(challenge.user.passwordHash, newPassword)) {
+        throw new ConflictException("The new password must be different from the current password");
+      }
+      await tx.user.update({ where: { id: challenge.userId }, data: { passwordHash, passwordChangeRequired: false } });
+      await tx.session.updateMany({ where: { userId: challenge.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.authChallenge.updateMany({ where: { userId: challenge.userId, purpose: "PASSWORD_RESET", consumedAt: null }, data: { consumedAt: new Date() } });
+      await this.recordSecurityEvent(tx, challenge.userId, challenge.tenantId, "PASSWORD_RESET_COMPLETED");
+      return challenge.user.email;
+    });
+    await this.abuse.reset("auth.login.account", email);
+    return { reset: true };
   }
 
   async refresh(rawToken: string, client: ClientContext): Promise<TokenPair> {
@@ -185,12 +248,36 @@ export class AuthService {
   }
 
   private async createChallengeInTransaction(tx: TransactionClient, userId: string, tenantId: string | undefined, purpose: ChallengePurpose): Promise<IssuedChallenge> {
+    const challenge = await this.createOpaqueChallengeInTransaction(tx, userId, tenantId, purpose, CHALLENGE_TTL_SECONDS);
+    const status = purpose === "PASSWORD_CHANGE" ? "PASSWORD_CHANGE_REQUIRED" : "MFA_ENROLLMENT_REQUIRED";
+    return { status, ...challenge };
+  }
+
+  private async createOpaqueChallengeInTransaction(tx: TransactionClient, userId: string, tenantId: string | undefined, purpose: ChallengePurpose, expiresIn: number) {
     const rawToken = randomBytes(32).toString("base64url");
     const now = new Date();
     await tx.authChallenge.updateMany({ where: { userId, purpose, consumedAt: null }, data: { consumedAt: now } });
-    await tx.authChallenge.create({ data: { userId, tenantId: tenantId ?? null, purpose, tokenHash: digest(rawToken), expiresAt: new Date(now.getTime() + CHALLENGE_TTL_SECONDS * 1000) } });
-    const status = purpose === "PASSWORD_CHANGE" ? "PASSWORD_CHANGE_REQUIRED" : "MFA_ENROLLMENT_REQUIRED";
-    return { status, challengeToken: rawToken, expiresIn: CHALLENGE_TTL_SECONDS };
+    await tx.authChallenge.create({ data: { userId, tenantId: tenantId ?? null, purpose, tokenHash: digest(rawToken), expiresAt: new Date(now.getTime() + expiresIn * 1000) } });
+    return { challengeToken: rawToken, expiresIn };
+  }
+
+  private async queueIdentityEmail(emailValue: string, purpose: "EMAIL_VERIFY" | "PASSWORD_RESET", template: "EMAIL_VERIFICATION" | "PASSWORD_RESET", expiresIn: number, eligible: (user: { emailVerifiedAt: Date | null }) => boolean): Promise<void> {
+    const email = emailValue.trim().toLowerCase();
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { email } });
+      if (!user?.isActive || !eligible(user)) return;
+      await tx.$executeRaw`SELECT set_config('app.user_id', ${user.id}, true)`;
+      const membership = await tx.tenantMembership.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+      const challenge = await this.createOpaqueChallengeInTransaction(tx, user.id, membership?.tenantId, purpose, expiresIn);
+      await this.notifications.enqueue(tx, user.id, user.email, template, challenge.challengeToken);
+    });
+  }
+
+  private async protectChallenge(scope: string, challengeToken: string, client: ClientContext): Promise<void> {
+    await Promise.all([
+      this.abuse.assertAllowed(`auth.challenge.${scope}.ip`, client.ip ?? "unknown", 30, 15 * 60, 5 * 60),
+      this.abuse.assertAllowed(`auth.challenge.${scope}.token`, challengeToken, 8, 15 * 60, 15 * 60)
+    ]);
   }
 
   private async consumeChallenge(tx: TransactionClient, rawToken: string, expectedPurpose: ChallengePurpose) {

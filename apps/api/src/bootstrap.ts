@@ -10,10 +10,14 @@ import { AppModule } from "./app.module.js";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
 import { redactSensitiveUrl } from "./common/log-redaction.js";
 import { resolveRequestId } from "./common/request-id.js";
-import { ENVIRONMENT, type Environment } from "./config/environment.js";
+import { ENVIRONMENT, parseEnvironment, type Environment } from "./config/environment.js";
 
 export async function createApplication(): Promise<NestFastifyApplication> {
-  const adapter = new FastifyAdapter({ logger: { serializers: { req: (request: FastifyRequest) => ({ method: request.method, url: redactSensitiveUrl(request.url), host: request.hostname, remoteAddress: request.ip }) } }, genReqId: (request: IncomingMessage) => {
+  const bootstrapEnvironment = parseEnvironment(process.env);
+  const trustProxy = bootstrapEnvironment.TRUST_PROXY_HOPS > 0
+    ? (_address: string, hop: number) => hop < bootstrapEnvironment.TRUST_PROXY_HOPS
+    : false;
+  const adapter = new FastifyAdapter({ trustProxy, logger: { serializers: { req: (request: FastifyRequest) => ({ method: request.method, url: redactSensitiveUrl(request.url), host: request.hostname, remoteAddress: request.ip }) } }, genReqId: (request: IncomingMessage) => {
     return resolveRequestId(request.headers["x-request-id"]);
   }});
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);

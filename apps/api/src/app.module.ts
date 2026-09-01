@@ -11,11 +11,15 @@ import { CatalogModule } from "./domains/catalog/catalog.module.js";
 import { CustomersModule } from "./domains/customers/customers.module.js";
 import { ReportsModule } from "./domains/reports/reports.module.js";
 import { PublicModule } from "./domains/public/public.module.js";
+import { NotificationsModule } from "./notifications/notifications.module.js";
+import { SecurityModule } from "./security/security.module.js";
 
 @Module({
   imports: [
     EnvironmentModule,
     DatabaseModule,
+    NotificationsModule,
+    SecurityModule,
     HealthModule,
     AuthModule,
     TenantModule,
