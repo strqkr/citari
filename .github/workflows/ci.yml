@@ -41,6 +41,10 @@ jobs:
       DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
       BOOTSTRAP_DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
       PG_TEST_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari
+      JWT_ISSUER: https://ci.citari.test
+      JWT_AUDIENCE: citari-ci
+      JWT_SECRET: ci-integration-secret-with-at-least-32-bytes
+      E2E_SUPERADMIN_PASSWORD: CiTemporaryPassword2026A
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +59,8 @@ jobs:
           printf '%s' 'CiTemporaryPassword2026A' | pnpm admin:bootstrap
           test "$(psql "$PG_TEST_URL" -tAc 'SELECT count(*) FROM users')" = "1"
           test "$(psql "$PG_TEST_URL" -tAc 'SELECT count(*) FROM tenants')" = "0"
+      - name: Run real HTTP and tenant-isolation smoke test
+        run: pnpm --filter @citari/api test:integration
 
   images:
     name: Production Docker images
