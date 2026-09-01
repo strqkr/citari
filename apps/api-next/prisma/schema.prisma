@@ -1,0 +1,331 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GlobalRole {
+  SUPER_ADMIN
+}
+
+enum TenantRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum TenantStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum BookingStatus {
+  HELD
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum ContactKind {
+  EMAIL
+  PHONE
+}
+
+model User {
+  id                     String             @id @default(uuid()) @db.Uuid
+  email                  String             @unique @db.VarChar(254)
+  firstName              String             @db.VarChar(100)
+  lastName               String             @db.VarChar(200)
+  passwordHash           String?            @db.VarChar(255)
+  emailVerifiedAt        DateTime?          @db.Timestamptz(3)
+  passwordChangeRequired Boolean            @default(true)
+  mfaRequired            Boolean            @default(false)
+  mfaEnrolledAt          DateTime?          @db.Timestamptz(3)
+  globalRole             GlobalRole?
+  isActive               Boolean            @default(true)
+  createdAt              DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(3)
+  memberships            TenantMembership[]
+  sessions               Session[]
+  auditEvents            AuditEvent[]       @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String    @unique @db.Char(64)
+  familyId         String    @db.Uuid
+  expiresAt        DateTime  @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  lastUsedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  ipHash           String?   @db.Char(64)
+  userAgent        String?   @db.VarChar(512)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@map("sessions")
+}
+
+model Tenant {
+  id              String             @id @default(uuid()) @db.Uuid
+  name            String             @db.VarChar(200)
+  slug            String             @unique @db.VarChar(100)
+  status          TenantStatus       @default(PENDING_VERIFICATION)
+  timezone        String             @db.VarChar(64)
+  locale          String             @default("es-CR") @db.VarChar(16)
+  currency        String             @default("CRC") @db.Char(3)
+  description     String?
+  logoUrl         String?            @db.VarChar(1024)
+  publicMessage   String?            @db.VarChar(500)
+  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
+  memberships     TenantMembership[]
+  contacts        TenantContact[]
+  categories      ServiceCategory[]
+  services        Service[]
+  locations       Location[]
+  customers       Customer[]
+  bookings        Booking[]
+  auditEvents     AuditEvent[]
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([status])
+  @@map("tenants")
+}
+
+model TenantMembership {
+  tenantId  String     @db.Uuid
+  userId    String     @db.Uuid
+  role      TenantRole
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+model TenantContact {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  kind       ContactKind
+  value      String      @db.VarChar(254)
+  isPrimary  Boolean     @default(false)
+  verifiedAt DateTime?   @db.Timestamptz(3)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, kind, value])
+  @@index([tenantId, kind])
+  @@map("tenant_contacts")
+}
+
+model ServiceCategory {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String    @db.VarChar(150)
+  description String?   @db.VarChar(500)
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  services    Service[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive, sortOrder])
+  @@map("service_categories")
+}
+
+model Service {
+  id                  String          @id @default(uuid()) @db.Uuid
+  tenantId            String          @db.Uuid
+  categoryId          String          @db.Uuid
+  name                String          @db.VarChar(200)
+  description         String?
+  durationMinutes     Int
+  bufferBeforeMinutes Int             @default(0)
+  bufferAfterMinutes  Int             @default(0)
+  price               Decimal?        @db.Decimal(12, 2)
+  currency            String          @db.Char(3)
+  showPrice           Boolean         @default(false)
+  isActive            Boolean         @default(true)
+  sortOrder           Int             @default(0)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @db.Timestamptz(3)
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category            ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  bookings            Booking[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, categoryId, isActive])
+  @@map("services")
+}
+
+model Location {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  name          String         @db.VarChar(200)
+  timezone      String?        @db.VarChar(64)
+  addressLine1  String?        @db.VarChar(200)
+  addressLine2  String?        @db.VarChar(200)
+  province      String?        @db.VarChar(100)
+  canton        String?        @db.VarChar(100)
+  district      String?        @db.VarChar(100)
+  postalCode    String?        @db.VarChar(20)
+  isMain        Boolean        @default(false)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  businessHours BusinessHour[]
+  bookings      Booking[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, isActive])
+  @@map("locations")
+}
+
+model BusinessHour {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  locationId String    @db.Uuid
+  dayOfWeek  Int
+  openTime   DateTime? @db.Time(0)
+  closeTime  DateTime? @db.Time(0)
+  isClosed   Boolean   @default(false)
+  location   Location  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([locationId, dayOfWeek])
+  @@index([tenantId, locationId])
+  @@map("business_hours")
+}
+
+model Customer {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  firstName    String    @db.VarChar(100)
+  lastName     String    @db.VarChar(200)
+  email        String?   @db.VarChar(254)
+  phone        String?   @db.VarChar(30)
+  notes        String?   @db.VarChar(1000)
+  consentAt    DateTime? @db.Timestamptz(3)
+  anonymizedAt DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  bookings     Booking[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, email])
+  @@index([tenantId, createdAt])
+  @@map("customers")
+}
+
+model Booking {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  tenantId               String                 @db.Uuid
+  customerId             String                 @db.Uuid
+  serviceId              String                 @db.Uuid
+  locationId             String                 @db.Uuid
+  status                 BookingStatus          @default(PENDING)
+  startAt                DateTime               @db.Timestamptz(3)
+  endAt                  DateTime               @db.Timestamptz(3)
+  holdExpiresAt          DateTime?              @db.Timestamptz(3)
+  serviceName            String                 @db.VarChar(200)
+  serviceDurationMinutes Int
+  servicePrice           Decimal?               @db.Decimal(12, 2)
+  currency               String                 @db.Char(3)
+  customerNotes          String?                @db.VarChar(1000)
+  internalNotes          String?                @db.VarChar(1000)
+  version                Int                    @default(1)
+  createdAt              DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime               @updatedAt @db.Timestamptz(3)
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer               Customer               @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  service                Service                @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: Restrict)
+  location               Location               @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  publicTokens           BookingPublicToken[]
+  statusHistory          BookingStatusHistory[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, startAt, status])
+  @@index([tenantId, customerId, createdAt])
+  @@map("bookings")
+}
+
+model BookingStatusHistory {
+  id         String         @id @default(uuid()) @db.Uuid
+  tenantId   String         @db.Uuid
+  bookingId  String         @db.Uuid
+  fromStatus BookingStatus?
+  toStatus   BookingStatus
+  reason     String?        @db.VarChar(500)
+  actorId    String?        @db.Uuid
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+  booking    Booking        @relation(fields: [tenantId, bookingId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId, createdAt])
+  @@map("booking_status_history")
+}
+
+model BookingPublicToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  bookingId String    @db.Uuid
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  booking   Booking   @relation(fields: [tenantId, bookingId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId, expiresAt])
+  @@map("booking_public_tokens")
+}
+
+model IdempotencyKey {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String?  @db.Uuid
+  scope        String   @db.VarChar(100)
+  keyHash      String   @db.Char(64)
+  requestHash  String   @db.Char(64)
+  responseCode Int?
+  responseBody Json?
+  expiresAt    DateTime @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, keyHash])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model AuditEvent {
+  id          BigInt   @id @default(autoincrement())
+  tenantId    String?  @db.Uuid
+  actorUserId String?  @db.Uuid
+  action      String   @db.VarChar(100)
+  entityType  String   @db.VarChar(100)
+  entityId    String?  @db.VarChar(100)
+  reason      String?  @db.VarChar(500)
+  requestId   String?  @db.VarChar(100)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_events")
+}
