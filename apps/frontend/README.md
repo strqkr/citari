@@ -1,9 +1,8 @@
 # Citari Frontend (Next.js)
 
-Citari's frontend (App Router, React Server Components). Wired to the real
-`apps/api` API (auth, full back-office, availability, public
-booking/tracking flow). See [docs/api-handover.md](../../docs/api-handover.md)
-for the full endpoint reference.
+Citari's frontend uses the Next.js App Router and is wired exclusively to the
+PostgreSQL/Prisma API in `apps/api-next`: authentication, back-office,
+availability, public booking, and customer tracking all use real HTTP data.
 
 ## Getting started (recommended: Docker)
 
@@ -13,11 +12,8 @@ From the repo root:
 docker compose up --build
 ```
 
-Brings up `db` + `api` + this frontend in development mode with **real hot
-reload** (bind mount + `next dev --webpack`, with polling so it works over
-Windows/Docker Desktop bind mounts): save a file and the change shows up on
-its own, no rebuild needed. `NEXT_PUBLIC_API_MODE=api` is already set by
-default in compose, pointing at the stack's real API.
+Brings up PostgreSQL, the API, and this frontend. No demo records are created;
+bootstrap the first superadmin explicitly as documented in the root README.
 
 Frontend at http://localhost:3000.
 
@@ -30,17 +26,12 @@ pnpm install
 pnpm dev
 ```
 
-Create `apps/frontend/.env.local` (gitignored) to point at a real API
-instead of mock data:
+Create `apps/frontend/.env.local` (gitignored) when the API is not listening
+on the default `http://localhost:8000` address:
 
 ```bash
-NEXT_PUBLIC_API_MODE=api
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
-
-- `mock` (default if `.env.local` isn't set): doesn't hit the real backend,
-  uses fake data from `lib/mock-data.ts`. Useful for working on design only.
-- `api`: real HTTP traffic against `apps/api`.
 
 ## Production
 
@@ -56,8 +47,8 @@ baked into the bundle **at build time**, not at runtime.
 - `components/admin/`, `components/booking/`, `components/marketing/`: managers and screens per domain.
 - `lib/endpoints.ts`: map of API endpoints.
 - `lib/api.ts`: HTTP client (picks the browser URL or the internal Docker one based on `typeof window`).
-- `lib/resource.ts`: `useResource`/`useResourceOne` hook with mock fallback and loading/error states.
-- `lib/mock-data.ts`: fake data for `NEXT_PUBLIC_API_MODE=mock`.
+- `lib/resource.ts`: `useResource`/`useResourceOne` hooks with loading, retry,
+  and production error states.
 - `hooks/useAuth.ts`: session rehydration (owner/superadmin) via `GET /auth/me`.
 - `types/`: TS contracts aligned with the API schemas.
 

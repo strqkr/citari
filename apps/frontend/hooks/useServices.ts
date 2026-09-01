@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, isMockMode } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import { mockServices } from "@/lib/mock-data";
-import type { Service } from "@/types/service";
+import type { Service, ServiceCategory } from "@/types/service";
 
 export function useServices(tenantSlug: string) {
   const [services, setServices] = useState<Service[]>([]);
@@ -14,18 +13,18 @@ export function useServices(tenantSlug: string) {
     let active = true;
     async function load() {
       setLoading(true);
-      if (isMockMode()) {
-        setServices(mockServices);
-        setLoading(false);
-        return;
-      }
-      const data = await apiGet<Service[]>(endpoints.public.services(tenantSlug));
+      const data = await apiGet<(ServiceCategory & { services: Service[] })[]>(endpoints.public.services(tenantSlug));
       if (active) {
-        setServices(data);
+        setServices(data.flatMap((category) => category.services.map((service) => ({ ...service, categoryId: category.id, category }))));
         setLoading(false);
       }
     }
-    load().catch(() => setLoading(false));
+    load().catch(() => {
+      if (active) {
+        setServices([]);
+        setLoading(false);
+      }
+    });
     return () => {
       active = false;
     };

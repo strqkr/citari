@@ -6,19 +6,19 @@ import { FormEvent, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiPost, isMockMode } from "@/lib/api";
+import { ApiError, apiPostIdempotent } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 
 const textareaClass =
   "flex min-h-[88px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30";
 
-type BookingResponse = { trackingCode: string };
+type BookingResponse = { bookingId: string; status: string; trackingToken: string };
 
 export function CustomerStep({ slug }: { slug: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const serviceId = searchParams.get("service") || "";
-  const blockId = searchParams.get("block") || "";
+  const startAt = searchParams.get("startAt") || "";
   const locationId = searchParams.get("location") || "";
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
   const [loading, setLoading] = useState(false);
@@ -32,33 +32,28 @@ export function CustomerStep({ slug }: { slug: string }) {
     event.preventDefault();
     setError(null);
 
-    if (isMockMode()) {
-      const params = new URLSearchParams({ name: form.firstName, code: "CITARI-DEMO01" });
-      router.push(`/book/${slug}/confirmation?${params.toString()}`);
-      return;
-    }
-
-    if (!serviceId || !blockId || !locationId) {
+    if (!serviceId || !startAt || !locationId) {
       setError("Falta informacion del horario seleccionado. Volve a elegir fecha y hora.");
       return;
     }
 
     setLoading(true);
     try {
-      const booking = await apiPost<BookingResponse>(endpoints.public.bookings(slug), {
-        serviceId: Number(serviceId),
-        locationId: Number(locationId),
-        availabilityBlockId: Number(blockId),
+      const booking = await apiPostIdempotent<BookingResponse>(endpoints.public.bookings(slug), {
+        serviceId,
+        locationId,
+        startAt,
         customer: {
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email,
-          phone: form.phone
+          phone: form.phone,
+          consent: true
         },
-        customerNotes: form.notes || null
-      });
+        customerNotes: form.notes || undefined
+      }, crypto.randomUUID());
 
-      const params = new URLSearchParams({ name: form.firstName, code: booking.trackingCode });
+      const params = new URLSearchParams({ name: form.firstName, code: booking.trackingToken });
       router.push(`/book/${slug}/confirmation?${params.toString()}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail || err.title : "No se pudo crear la reserva. Intenta de nuevo.");

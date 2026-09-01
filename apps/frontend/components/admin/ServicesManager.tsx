@@ -17,38 +17,22 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner, ManagerHeader } from "@/components/admin/manager-ui";
-import { apiDelete, apiPatch, apiPost, isMockMode } from "@/lib/api";
+import { apiDelete, apiPatch, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
-import { mockServices } from "@/lib/mock-data";
-import type { Service } from "@/types/service";
+import type { Service, ServiceCategory } from "@/types/service";
 
-type Category = { categoryId: number; name: string };
-type ServiceRow = Service & { categoryId?: number; categoryName?: string };
+type Category = ServiceCategory;
+type ServiceRow = Service;
 
-const mockCategories: Category[] = [
-  { categoryId: 1, name: "Odontologia general" },
-  { categoryId: 2, name: "Estetica dental" },
-  { categoryId: 3, name: "Ortodoncia" }
-];
-
-const initialServices: ServiceRow[] = mockServices.map((service) => ({
-  ...service,
-  categoryId: 1,
-  categoryName: "Odontologia general"
-}));
-
-const emptyForm = { name: "", description: "", durationMinutes: 30, price: 0, showPrice: true, categoryId: 0 };
+const emptyForm = { name: "", description: "", durationMinutes: 30, price: 0, showPrice: true, categoryId: "" };
 type ServiceForm = typeof emptyForm;
 
 export function ServicesManager() {
-  const { items: services, setItems: setServices, loading, error, setError, reload } = useResource<ServiceRow>(
-    endpoints.services.list,
-    initialServices
-  );
-  const { items: categories } = useResource<Category>(endpoints.serviceCategories.list, mockCategories);
+  const { items: services, setItems: setServices, loading, error, setError, reload } = useResource<ServiceRow>(endpoints.services.list);
+  const { items: categories } = useResource<Category>(endpoints.serviceCategories.list);
   const [form, setForm] = useState<ServiceForm>(emptyForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,27 +40,18 @@ export function ServicesManager() {
   const filtered = services.filter((service) => service.name.toLowerCase().includes(search.toLowerCase()));
   const isEditing = editingId !== null;
 
-  function categoryName(id?: number): string {
+  function categoryName(id?: string): string {
     if (!id) return "—";
-    return categories.find((c) => c.categoryId === id)?.name ?? "—";
+    return categories.find((c) => c.id === id)?.name ?? "—";
   }
 
   async function saveService() {
     if (!form.name.trim()) return;
-    if (!isMockMode() && !form.categoryId) {
+    if (!form.categoryId) {
       setError("Selecciona una categoria para el servicio.");
       return;
     }
     setError(null);
-    if (isMockMode()) {
-      if (editingId) {
-        setServices((current) => current.map((s) => (s.serviceId === editingId ? { ...s, ...form, categoryName: categoryName(form.categoryId) } : s)));
-      } else {
-        setServices((current) => [...current, { serviceId: Date.now(), ...form, categoryName: categoryName(form.categoryId) }]);
-      }
-      closeModal();
-      return;
-    }
     setBusy(true);
     try {
       const body = {
@@ -85,14 +60,15 @@ export function ServicesManager() {
         description: form.description || null,
         durationMinutes: form.durationMinutes,
         price: form.showPrice ? form.price : null,
-        showPrice: form.showPrice
+        showPrice: form.showPrice,
+        currency: "CRC"
       };
       if (editingId) {
         const updated = await apiPatch<Service>(endpoints.services.byId(editingId), body);
-        setServices((current) => current.map((s) => (s.serviceId === editingId ? { ...updated, categoryId: form.categoryId, categoryName: categoryName(form.categoryId) } : s)));
+        setServices((current) => current.map((s) => (s.id === editingId ? updated : s)));
       } else {
         const created = await apiPost<Service>(endpoints.services.list, body);
-        setServices((current) => [...current, { ...created, categoryId: form.categoryId, categoryName: categoryName(form.categoryId) }]);
+        setServices((current) => [...current, created]);
       }
       closeModal();
     } catch (err) {
@@ -103,35 +79,31 @@ export function ServicesManager() {
   }
 
   async function deleteService(service: ServiceRow) {
-    if (isMockMode()) {
-      setServices((current) => current.filter((s) => s.serviceId !== service.serviceId));
-      return;
-    }
     setError(null);
     try {
-      await apiDelete(endpoints.services.byId(service.serviceId));
-      setServices((current) => current.filter((s) => s.serviceId !== service.serviceId));
+      await apiDelete(endpoints.services.byId(service.id));
+      setServices((current) => current.filter((s) => s.id !== service.id));
     } catch (err) {
       setError(errMessage(err, "No se pudo eliminar el servicio."));
     }
   }
 
   function editService(service: ServiceRow) {
-    setEditingId(service.serviceId);
+    setEditingId(service.id);
     setForm({
       name: service.name,
-      description: service.description,
+      description: service.description ?? "",
       durationMinutes: service.durationMinutes,
-      price: service.price || 0,
+      price: Number(service.price ?? 0),
       showPrice: service.showPrice,
-      categoryId: service.categoryId ?? 0
+      categoryId: service.categoryId
     });
     setIsModalOpen(true);
   }
 
   function openCreateModal() {
     setEditingId(null);
-    setForm({ ...emptyForm, categoryId: categories[0]?.categoryId ?? 0 });
+    setForm({ ...emptyForm, categoryId: categories[0]?.id ?? "" });
     setIsModalOpen(true);
   }
 
@@ -184,12 +156,12 @@ export function ServicesManager() {
                 </TableRow>
               ) : (
                 filtered.map((service) => (
-                  <TableRow key={service.serviceId}>
+                  <TableRow key={service.id}>
                     <TableCell className="pl-6">
                       <span className="block font-medium">{service.name}</span>
                       <span className="text-xs text-muted-foreground">{service.description}</span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{service.categoryName ?? categoryName(service.categoryId)}</TableCell>
+                    <TableCell className="text-muted-foreground">{service.category?.name ?? categoryName(service.categoryId)}</TableCell>
                     <TableCell className="text-muted-foreground">{service.durationMinutes} min</TableCell>
                     <TableCell className="text-muted-foreground">{service.showPrice && service.price ? `CRC ${service.price}` : "No visible"}</TableCell>
                     <TableCell className="pr-6 text-right">
@@ -219,10 +191,10 @@ export function ServicesManager() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="svc-cat">Categoria</Label>
-            <select id="svc-cat" className={selectClass} value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: Number(e.target.value) })}>
-              <option value={0} disabled>Selecciona una categoria</option>
+            <select id="svc-cat" className={selectClass} value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+              <option value="" disabled>Selecciona una categoria</option>
               {categories.map((category) => (
-                <option key={category.categoryId} value={category.categoryId}>{category.name}</option>
+                <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>
           </div>

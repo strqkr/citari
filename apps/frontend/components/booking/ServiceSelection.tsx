@@ -6,8 +6,8 @@ import { buttonVariants } from "@/components/ui/button";
 import type { Service } from "@/types/service";
 
 export function ServiceSelection({ slug, services }: { slug: string; services: Service[] }) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const selected = services.find((service) => service.serviceId === selectedId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = services.find((service) => service.id === selectedId);
 
   return (
     <div>
@@ -23,12 +23,12 @@ export function ServiceSelection({ slug, services }: { slug: string; services: S
           </div>
         ) : (
           services.map((service) => {
-            const isSelected = selectedId === service.serviceId;
+            const isSelected = selectedId === service.id;
             return (
               <button
                 type="button"
-                key={service.serviceId}
-                onClick={() => setSelectedId(service.serviceId)}
+                key={service.id}
+                onClick={() => setSelectedId(service.id)}
                 aria-pressed={isSelected}
                 className={`flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left transition-colors ${
                   isSelected
@@ -64,7 +64,7 @@ export function ServiceSelection({ slug, services }: { slug: string; services: S
         </Link>
         {selected ? (
           <Link
-            href={`/book/${slug}/datetime?service=${selected.serviceId}`}
+            href={`/book/${slug}/datetime?service=${selected.id}`}
             className={buttonVariants()}
           >
             Continuar

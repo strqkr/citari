@@ -1,28 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, clearAuthToken, getAuthToken, isMockMode, setAuthToken } from "./api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./api";
 
 describe("API client", () => {
   beforeEach(() => {
-    localStorage.clear();
     vi.restoreAllMocks();
   });
 
-  it("never enables mock runtime data", () => expect(isMockMode()).toBe(false));
-
-  it("stores and clears the session token", () => {
-    setAuthToken("token");
-    expect(getAuthToken()).toBe("token");
-    clearAuthToken();
-    expect(getAuthToken()).toBeNull();
-  });
-
-  it("parses problem details and clears rejected sessions", async () => {
-    setAuthToken("expired");
+  it("parses RFC 7807 problem details", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
       type: "urn:test", title: "Unauthorized", status: 401, detail: "Expired", traceId: "trace"
     }), { status: 401, headers: { "content-type": "application/problem+json" } })));
     await expect(apiGet("/private")).rejects.toMatchObject({ status: 401, detail: "Expired", traceId: "trace" });
-    expect(getAuthToken()).toBeNull();
   });
 
   it("supports all methods, JSON bodies and empty responses", async () => {

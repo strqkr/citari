@@ -2,17 +2,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BookingShell } from "@/components/layout/BookingShell";
 import { buttonVariants } from "@/components/ui/button";
-import { apiGet, isMockMode } from "@/lib/api";
+import { apiGet } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
-import { mockBookings } from "@/lib/mock-data";
-import type { Booking } from "@/types/booking";
+type TrackedBooking = { id: string; status: string; startAt: string; endAt: string; serviceName: string; location: { name: string }; tenant: { name: string } };
 
-async function loadBooking(code: string): Promise<Booking | null> {
-  if (isMockMode()) {
-    return mockBookings.find((item) => item.trackingCode === code) || mockBookings[0];
-  }
+async function loadBooking(code: string): Promise<TrackedBooking | null> {
   try {
-    return await apiGet<Booking>(endpoints.track.get(code));
+    return await apiGet<TrackedBooking>(endpoints.track.get(code));
   } catch {
     return null;
   }
@@ -26,10 +22,11 @@ export default async function TrackPage({ params }: { params: Promise<{ code: st
   }
 
   const rows: [string, string][] = [
-    ["Codigo", booking.trackingCode],
-    ["Cliente", booking.customerName],
+    ["Reserva", booking.id],
+    ["Negocio", booking.tenant.name],
     ["Servicio", booking.serviceName],
-    ["Fecha", `${booking.bookingDate} - ${booking.startTime}`],
+    ["Fecha", new Date(booking.startAt).toLocaleString("es-CR")],
+    ["Sede", booking.location.name],
     ["Estado", booking.status]
   ];
 
@@ -51,17 +48,7 @@ export default async function TrackPage({ params }: { params: Promise<{ code: st
           ))}
         </dl>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link href={`/track/${booking.trackingCode}/reschedule`} className={buttonVariants()}>
-            Reagendar
-          </Link>
-          <Link
-            href={`/track/${booking.trackingCode}/cancel`}
-            className={buttonVariants({ variant: "outline" })}
-          >
-            Cancelar
-          </Link>
-        </div>
+        <div className="mt-6 flex flex-wrap gap-3"><Link href="/track" className={buttonVariants({ variant: "outline" })}>Consultar otra reserva</Link>{booking.status === "PENDING" || booking.status === "CONFIRMED" ? <><Link href={`/track/${encodeURIComponent(code)}/reschedule`} className={buttonVariants({ variant: "outline" })}>Reagendar</Link><Link href={`/track/${encodeURIComponent(code)}/cancel`} className={buttonVariants({ variant: "destructive" })}>Cancelar</Link></> : null}</div>
       </div>
     </BookingShell>
   );

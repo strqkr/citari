@@ -8,7 +8,7 @@ function unwrap<T>(res: Page<T> | T[]): T[] {
   return Array.isArray(res) ? res : res.items;
 }
 
-/** GET a list endpoint, tolerating both PageResponse<T> and plain arrays. */
+/** GET a list endpoint, accepting paginated API results and plain arrays. */
 export async function apiList<T>(path: string): Promise<T[]> {
   return unwrap(await apiGet<Page<T> | T[]>(path));
 }
@@ -19,15 +19,9 @@ export function errMessage(err: unknown, fallback: string): string {
 }
 
 /**
- * Loads a list resource with a mock fallback. In mock mode (the default) it
- * returns `mock` synchronously so the design demo runs standalone; when
- * NEXT_PUBLIC_API_MODE=api it fetches `path` on mount.
- *
- * `mock` must be a stable reference (module-level constant); it is
- * intentionally excluded from the reload dependencies.
+ * Loads a list resource from the production API.
  */
-export function useResource<T>(path: string, legacyMock?: T[]) {
-  void legacyMock;
+export function useResource<T>(path: string) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +45,7 @@ export function useResource<T>(path: string, legacyMock?: T[]) {
 }
 
 /** Single-object variant of {@link useResource} (e.g. the dashboard summary). */
-export function useResourceOne<T>(path: string, legacyMock?: T) {
-  void legacyMock;
+export function useResourceOne<T>(path: string) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

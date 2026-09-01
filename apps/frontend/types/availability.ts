@@ -1,8 +1,2 @@
-export type AvailabilityBlock = {
-  availabilityBlockId: number;
-  blockDate: string;
-  startTime: string;
-  endTime: string;
-  isReserved?: boolean;
-  locationId?: number;
-};
+export type AvailabilityBlock = { id: string; locationId: string; startsAt: string; endsAt: string; reason: string | null };
+export type AvailabilityResponse = { timezone: string; slots: string[] };
