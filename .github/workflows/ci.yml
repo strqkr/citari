@@ -29,6 +29,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
       BOOTSTRAP_DATABASE_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari?schema=public
+      PG_TEST_URL: postgresql://citari_admin:ci-only-not-production@localhost:5432/citari
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -57,8 +58,8 @@ jobs:
         run: |
           printf '%s' 'CiTemporaryPassword2026A' | pnpm admin:bootstrap
           printf '%s' 'CiTemporaryPassword2026A' | pnpm admin:bootstrap
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM users')" = "1"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM tenants')" = "0"
+          test "$(psql "$PG_TEST_URL" -tAc 'SELECT count(*) FROM users')" = "1"
+          test "$(psql "$PG_TEST_URL" -tAc 'SELECT count(*) FROM tenants')" = "0"
 
   lint-api:
     name: Lint API (ruff + mypy)
