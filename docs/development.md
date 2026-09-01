@@ -36,7 +36,7 @@ that implements those scripts. CI must use the pinned pnpm version and
 `pnpm install --frozen-lockfile`.
 
 Package-level commands remain available through filters, for example:
-`pnpm --filter @citari/api-next test`.
+`pnpm --filter @citari/api test`.
 
 ## Database lifecycle
 

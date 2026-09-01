@@ -18,8 +18,44 @@ services:
       retries: 12
       start_period: 10s
     restart: unless-stopped
-    networks:
-      - citari
+    networks: [citari]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-citari}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-citari}?schema=public
+      JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8000}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-citari-web}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [citari]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    environment:
+      API_INTERNAL_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [citari]
 
 volumes:
   postgres_data:
