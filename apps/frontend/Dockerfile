@@ -15,7 +15,7 @@ RUN corepack enable
 # participan en el lockfile antes de instalar para conservar la cache.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/frontend/package.json ./apps/frontend/package.json
-COPY apps/api-next/package.json ./apps/api-next/package.json
+COPY apps/api/package.json ./apps/api/package.json
 RUN pnpm install --frozen-lockfile --filter @citari/frontend...
 
 COPY apps/frontend ./apps/frontend

@@ -1,7 +1,4 @@
-.venv/
-citari_api.egg-info/
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+node_modules/
+dist/
+src/generated/prisma/
+.env

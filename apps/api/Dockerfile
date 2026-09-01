@@ -1,49 +1,38 @@
-FROM python:3.11-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+FROM node:24.3.0-bookworm-slim AS build
 
 WORKDIR /app
-
-COPY pyproject.toml README.md ./
-COPY app ./app
-
-# Install the Microsoft ODBC Driver 18 for SQL Server (msodbcsql18) + unixodbc,
-# plus the build toolchain pyodbc needs to compile against unixodbc headers.
-# The build-only packages (gcc/g++/curl/gnupg2/unixodbc-dev) are purged again
-# once the project is installed so the runtime image only keeps what it
-# actually needs to run (msodbcsql18 + unixodbc runtime libs).
-# libgssapi-krb5-2 must be installed EXPLICITLY (marked manual): msodbcsql18
-# dlopens it at connect time without declaring it as a package dependency,
-# and --auto-remove would otherwise purge it, breaking the driver with a
-# misleading "file not found" error.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        curl \
-        gnupg2 \
-        apt-transport-https \
-        ca-certificates \
-        gcc \
-        g++ \
-        unixodbc-dev \
-    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
-    && curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list -o /etc/apt/sources.list.d/mssql-release.list \
-    && sed -i 's#deb \[arch=amd64,armhf,arm64\]#deb [arch=amd64,armhf,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg]#g' /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 unixodbc libgssapi-krb5-2 \
-    && pip install --no-cache-dir -e . \
-    && apt-get purge -y --auto-remove curl gnupg2 apt-transport-https gcc g++ unixodbc-dev \
-    && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
 
-# Installed in editable mode (-e): with the docker-compose.yml bind mount,
-# the code in the container IS the host's code, and --reload picks up
-# changes just by saving the file, with no image rebuild needed (see the
-# dev profile in docker-compose.yml).
+ARG DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build?schema=public
+ENV DATABASE_URL=$DATABASE_URL
+ENV CI=true
 
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/frontend/package.json ./apps/frontend/package.json
+RUN pnpm install --frozen-lockfile --filter @citari/api...
+
+COPY apps/api ./apps/api
+WORKDIR /app/apps/api
+RUN pnpm db:generate && pnpm build && pnpm prune --prod
+
+FROM node:24.3.0-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app/apps/api
+
+COPY --from=build --chown=node:node /app/node_modules /app/node_modules
+COPY --from=build --chown=node:node /app/apps/api/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/apps/api/package.json ./package.json
+COPY --from=build --chown=node:node /app/apps/api/dist ./dist
+COPY --from=build --chown=node:node /app/apps/api/prisma ./prisma
+
+USER node
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8000/api/v1/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
-# --no-access-log: RequestContextMiddleware already logs every request as a
-# structured JSON line (method/path/status/duration); uvicorn's own access
-# log is plain text and was mixing with the JSON stream in `docker logs`.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+CMD ["node", "dist/main.js"]

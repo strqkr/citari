@@ -38,7 +38,7 @@ jobs:
           - name: frontend
             dockerfile: apps/frontend/Dockerfile
           - name: api
-            dockerfile: apps/api-next/Dockerfile
+            dockerfile: apps/api/Dockerfile
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
