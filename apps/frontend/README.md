@@ -1,7 +1,7 @@
 # Citari Frontend (Next.js)
 
 Citari's frontend uses the Next.js App Router and is wired exclusively to the
-PostgreSQL/Prisma API in `apps/api-next`: authentication, back-office,
+PostgreSQL/Prisma API in `apps/api`: authentication, back-office,
 availability, public booking, and customer tracking all use real HTTP data.
 
 ## Getting started (recommended: Docker)

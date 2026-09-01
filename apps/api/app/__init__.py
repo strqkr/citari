@@ -1,1 +1,0 @@
-"""Citari API application package."""
