@@ -36,9 +36,9 @@ jobs:
       matrix:
         include:
           - name: frontend
-            context: apps/frontend
+            dockerfile: apps/frontend/Dockerfile
           - name: api
-            context: apps/api
+            dockerfile: apps/api-next/Dockerfile
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -67,7 +67,8 @@ jobs:
       - name: Build and push ${{ matrix.name }} image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
+          context: .
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -75,4 +76,3 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000' }}
-            NEXT_PUBLIC_API_MODE=api

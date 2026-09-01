@@ -231,9 +231,7 @@ jobs:
   build-frontend:
     name: Build frontend Docker image
     runs-on: ubuntu-latest
-    # apps/frontend/Dockerfile accepts NEXT_PUBLIC_API_BASE_URL / NEXT_PUBLIC_API_MODE
-    # as build ARGs (Next.js inlines NEXT_PUBLIC_* at build time). Verified green in
-    # CI, so this job is now enforcing (no continue-on-error).
+    # NEXT_PUBLIC_API_BASE_URL is embedded by Next.js at build time.
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -242,5 +240,5 @@ jobs:
         run: |
           docker build \
             --build-arg NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 \
-            --build-arg NEXT_PUBLIC_API_MODE=api \
-            -t citari-frontend:ci apps/frontend
+            -f apps/frontend/Dockerfile \
+            -t citari-frontend:ci .
