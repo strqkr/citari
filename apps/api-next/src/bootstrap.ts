@@ -4,14 +4,16 @@ import cors from "@fastify/cors";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";
+import type { FastifyRequest } from "fastify";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
 import { ProblemDetailsFilter } from "./common/problem-details.filter.js";
+import { redactSensitiveUrl } from "./common/log-redaction.js";
 import { resolveRequestId } from "./common/request-id.js";
 import { ENVIRONMENT, type Environment } from "./config/environment.js";
 
 export async function createApplication(): Promise<NestFastifyApplication> {
-  const adapter = new FastifyAdapter({ logger: true, genReqId: (request: IncomingMessage) => {
+  const adapter = new FastifyAdapter({ logger: { serializers: { req: (request: FastifyRequest) => ({ method: request.method, url: redactSensitiveUrl(request.url), host: request.hostname, remoteAddress: request.ip }) } }, genReqId: (request: IncomingMessage) => {
     return resolveRequestId(request.headers["x-request-id"]);
   }});
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);

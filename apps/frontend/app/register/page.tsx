@@ -1,24 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiGet, apiPost, isMockMode } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 
-type BusinessType = { businessTypeId: number; name: string };
-
-const inputClass =
-  "flex h-11 w-full rounded-xl border border-border bg-card px-3.5 text-sm text-foreground shadow-soft focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
-
 export default function RegisterPage() {
-  const [types, setTypes] = useState<BusinessType[]>([]);
   const [form, setForm] = useState({
     businessName: "",
-    businessTypeId: "",
     slug: "",
     businessEmail: "",
     ownerFirstName: "",
@@ -31,13 +24,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    if (isMockMode()) return;
-    apiGet<BusinessType[]>(endpoints.businessTypes)
-      .then((list) => setTypes(list))
-      .catch(() => setTypes([]));
-  }, []);
-
   function update(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -45,15 +31,10 @@ export default function RegisterPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (isMockMode()) {
-      setDone(true);
-      return;
-    }
     setLoading(true);
     try {
       await apiPost(endpoints.auth.registerOwner, {
         businessName: form.businessName,
-        businessTypeId: Number(form.businessTypeId),
         slug: form.slug,
         businessEmail: form.businessEmail,
         ownerFirstName: form.ownerFirstName,
@@ -112,25 +93,6 @@ export default function RegisterPage() {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="businessTypeId">Tipo de negocio</Label>
-            <select
-              id="businessTypeId"
-              className={inputClass}
-              value={form.businessTypeId}
-              onChange={(e) => update("businessTypeId", e.target.value)}
-              required
-            >
-              <option value="" disabled>
-                Selecciona...
-              </option>
-              {types.map((t) => (
-                <option key={t.businessTypeId} value={t.businessTypeId}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="slug">Slug publico</Label>
             <Input id="slug" value={form.slug} onChange={(e) => update("slug", e.target.value)} placeholder="barberia-elite" required />
           </div>
@@ -160,7 +122,7 @@ export default function RegisterPage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="password">Contrasena</Label>
-            <Input id="password" type="password" value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="Minimo 8 caracteres" required autoComplete="new-password" />
+            <Input id="password" type="password" minLength={12} value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="Minimo 12 caracteres" required autoComplete="new-password" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Telefono</Label>

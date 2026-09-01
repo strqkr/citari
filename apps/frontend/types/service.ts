@@ -1,8 +1,2 @@
-export type Service = {
-  serviceId: number;
-  name: string;
-  description: string;
-  durationMinutes: number;
-  price?: number;
-  showPrice: boolean;
-};
+export type ServiceCategory = { id: string; name: string; description: string | null; isActive: boolean; sortOrder: number };
+export type Service = { id: string; categoryId: string; name: string; description: string | null; durationMinutes: number; bufferBeforeMinutes: number; bufferAfterMinutes: number; price: string | number | null; currency: string; showPrice: boolean; isActive: boolean; sortOrder: number; category?: ServiceCategory };

@@ -29,11 +29,6 @@ const apiBaseUrl = requiredUrl(
   isProduction ? undefined : "http://localhost:8000"
 );
 
-const configuredMode = process.env.NEXT_PUBLIC_API_MODE;
-if (configuredMode && configuredMode !== "api") {
-  throw new Error("NEXT_PUBLIC_API_MODE only supports 'api'; mock runtime data has been removed.");
-}
-
 export const frontendConfig = {
   apiBaseUrl,
   apiInternalBaseUrl: requiredUrl("API_INTERNAL_BASE_URL", process.env.API_INTERNAL_BASE_URL, apiBaseUrl)

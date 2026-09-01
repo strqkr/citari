@@ -17,7 +17,7 @@ import {
   Tags,
   Users
 } from "lucide-react";
-import { apiGet, clearAuthToken, isMockMode } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { useAuth, userInitials } from "@/hooks/useAuth";
 import {
@@ -71,14 +71,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   }
 ];
 
-type CurrentTenant = { tenantId: number; slug: string; name: string; status: string };
-
-const MOCK_TENANT: CurrentTenant = {
-  tenantId: 1,
-  slug: "barberia-el-colocho",
-  name: "Negocio demo",
-  status: "activo"
-};
+type CurrentTenant = { id: string; slug: string; name: string; status: string };
 
 function pageTitle(pathname: string): string {
   for (const group of navGroups) {
@@ -99,10 +92,6 @@ export function PrivateShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    if (isMockMode()) {
-      setTenant(MOCK_TENANT);
-      return;
-    }
     if (!user) return;
     apiGet<CurrentTenant>(endpoints.tenant.current)
       .then((current) => active && setTenant(current))
@@ -125,7 +114,7 @@ export function PrivateShell({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <AppSidebar tenant={tenant} />
         <SidebarInset>
-          <Topbar user={user} tenant={tenant} onLogout={() => { clearAuthToken(); router.push("/login"); }} />
+          <Topbar user={user} tenant={tenant} onLogout={() => { void apiPost(endpoints.auth.logout).finally(() => router.push("/login")); }} />
           <div className="flex-1 overflow-y-auto bg-background p-4 md:p-8">{children}</div>
         </SidebarInset>
       </SidebarProvider>
@@ -177,7 +166,7 @@ function AppSidebar({ tenant }: { tenant: CurrentTenant | null }) {
           <div className="rounded-lg bg-sidebar-accent/60 p-3">
             <Badge variant="brand" className="gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              {tenant?.status === "activo" || !tenant ? "Negocio activo" : tenant.status}
+              {tenant?.status === "ACTIVE" || !tenant ? "Negocio activo" : tenant.status}
             </Badge>
             <p className="mt-2 truncate text-xs text-sidebar-foreground/70">{tenant?.name ?? "Panel del negocio"}</p>
           </div>

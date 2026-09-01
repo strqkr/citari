@@ -17,55 +17,41 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner } from "@/components/admin/manager-ui";
-import { apiPost, isMockMode } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
 
 type Tenant = {
-  tenantId: number;
+  id: string;
   name: string;
   slug: string;
-  email?: string | null;
   status?: string;
 };
 
-const mockTenants: Tenant[] = [
-  { tenantId: 1, name: "Barberia El Colocho", slug: "barberia-el-colocho", email: "info@colochocr.com", status: "activo" },
-  { tenantId: 2, name: "Salon Elegance", slug: "salon-elegance", email: "contacto@elegancecr.com", status: "pendiente" },
-  { tenantId: 3, name: "Veterinaria San Jorge", slug: "vet-san-jorge", email: "vet@sanjorge.com", status: "suspendido" }
-];
-
-type StatusFilter = "todos" | "activo" | "pendiente" | "suspendido";
+type StatusFilter = "todos" | "ACTIVE" | "PENDING_VERIFICATION" | "SUSPENDED";
 
 const tabs: { key: StatusFilter; label: string }[] = [
   { key: "todos", label: "Todos" },
-  { key: "pendiente", label: "Solicitudes" },
-  { key: "activo", label: "Activos" },
-  { key: "suspendido", label: "Suspendidos" }
+  { key: "PENDING_VERIFICATION", label: "Solicitudes" }, { key: "ACTIVE", label: "Activos" }, { key: "SUSPENDED", label: "Suspendidos" }
 ];
 
 function statusBadge(status?: string) {
-  if (status === "activo") return <Badge variant="success">Activo</Badge>;
-  if (status === "suspendido") return <Badge variant="destructive">Suspendido</Badge>;
-  if (status === "pendiente") return <Badge variant="warning">Pendiente</Badge>;
+  if (status === "ACTIVE") return <Badge variant="success">Activo</Badge>;
+  if (status === "SUSPENDED") return <Badge variant="destructive">Suspendido</Badge>;
+  if (status === "PENDING_VERIFICATION") return <Badge variant="warning">Pendiente</Badge>;
   return <Badge variant="muted">{status ?? "-"}</Badge>;
 }
 
 export function TenantsManager() {
-  const { items: tenants, setItems, loading, error, setError, reload } = useResource<Tenant>(
-    `${endpoints.admin.tenants}?pageSize=100`,
-    mockTenants
-  );
+  const { items: tenants, setItems, loading, error, setError, reload } = useResource<Tenant>(`${endpoints.admin.tenants}?pageSize=100`);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<StatusFilter>("todos");
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     const c = { total: tenants.length, activo: 0, pendiente: 0, suspendido: 0 };
     for (const t of tenants) {
-      if (t.status === "activo") c.activo++;
-      else if (t.status === "pendiente") c.pendiente++;
-      else if (t.status === "suspendido") c.suspendido++;
+      if (t.status === "ACTIVE") c.activo++; else if (t.status === "PENDING_VERIFICATION") c.pendiente++; else if (t.status === "SUSPENDED") c.suspendido++;
     }
     return c;
   }, [tenants]);
@@ -73,22 +59,17 @@ export function TenantsManager() {
   const term = search.toLowerCase();
   const filtered = tenants.filter((t) => {
     const matchesTab = tab === "todos" || t.status === tab;
-    const matchesSearch = `${t.name} ${t.slug} ${t.email ?? ""}`.toLowerCase().includes(term);
+    const matchesSearch = `${t.name} ${t.slug}`.toLowerCase().includes(term);
     return matchesTab && matchesSearch;
   });
 
   async function action(tenant: Tenant, kind: "activate" | "suspend") {
-    const nextStatus = kind === "activate" ? "activo" : "suspendido";
-    if (isMockMode()) {
-      setItems((cur) => cur.map((t) => (t.tenantId === tenant.tenantId ? { ...t, status: nextStatus } : t)));
-      return;
-    }
     setError(null);
-    setBusyId(tenant.tenantId);
+    setBusyId(tenant.id);
     try {
-      const url = kind === "activate" ? endpoints.admin.activateTenant(tenant.tenantId) : endpoints.admin.suspendTenant(tenant.tenantId);
-      const updated = await apiPost<Tenant>(url);
-      setItems((cur) => cur.map((t) => (t.tenantId === tenant.tenantId ? { ...t, ...updated } : t)));
+      const url = kind === "activate" ? endpoints.admin.activateTenant(tenant.id) : endpoints.admin.suspendTenant(tenant.id);
+      const updated = await apiPost<Tenant>(url, { reason: "Administrative status update" });
+      setItems((cur) => cur.map((t) => (t.id === tenant.id ? updated : t)));
     } catch (err) {
       setError(errMessage(err, "No se pudo actualizar el negocio."));
     } finally {
@@ -145,7 +126,7 @@ export function TenantsManager() {
                   }`}
                 >
                   {t.label}
-                  {t.key === "pendiente" && counts.pendiente > 0 ? (
+                  {t.key === "PENDING_VERIFICATION" && counts.pendiente > 0 ? (
                     <span className="ml-1.5 rounded bg-amber-500/20 px-1.5 text-xs text-amber-700">{counts.pendiente}</span>
                   ) : null}
                 </button>
@@ -179,15 +160,14 @@ export function TenantsManager() {
               ) : filtered.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">
-                    {tab === "pendiente" ? "No hay solicitudes pendientes." : "No hay negocios que coincidan."}
+                    {tab === "PENDING_VERIFICATION" ? "No hay solicitudes pendientes." : "No hay negocios que coincidan."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map((tenant) => (
-                  <TableRow key={tenant.tenantId} className={busyId === tenant.tenantId ? "opacity-50" : undefined}>
+                  <TableRow key={tenant.id} className={busyId === tenant.id ? "opacity-50" : undefined}>
                     <TableCell className="pl-6">
                       <span className="block font-medium">{tenant.name}</span>
-                      {tenant.email ? <span className="text-xs text-muted-foreground">{tenant.email}</span> : null}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{tenant.slug}</TableCell>
                     <TableCell>{statusBadge(tenant.status)}</TableCell>
@@ -198,19 +178,19 @@ export function TenantsManager() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem asChild>
-                            <Link href={`/admin/tenants/${tenant.tenantId}`}>
+                            <Link href={`/admin/tenants/${tenant.id}`}>
                               <ExternalLink />
                               Ver detalle
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => action(tenant, "activate")} disabled={tenant.status === "activo"}>
+                          <DropdownMenuItem onClick={() => action(tenant, "activate")} disabled={tenant.status === "ACTIVE"}>
                             <Play />
-                            {tenant.status === "pendiente" ? "Aprobar y activar" : "Activar"}
+                            {tenant.status === "PENDING_VERIFICATION" ? "Aprobar y activar" : "Activar"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => action(tenant, "suspend")}
-                            disabled={tenant.status === "suspendido"}
+                            disabled={tenant.status === "SUSPENDED"}
                             className="text-destructive focus:text-destructive"
                           >
                             <PauseCircle />

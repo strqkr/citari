@@ -17,53 +17,36 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { apiPost, isMockMode } from "@/lib/api";
+import { apiPatch } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
-import { mockAvailability, mockBookings } from "@/lib/mock-data";
 import type { AvailabilityBlock } from "@/types/availability";
 import type { Booking } from "@/types/booking";
 
 const statusLabels: Record<Booking["status"], string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmada",
-  cancelled: "Cancelada",
-  completed: "Completada",
-  rescheduled: "Reagendada"
+  HELD: "Retenida", PENDING: "Pendiente", CONFIRMED: "Confirmada", CANCELLED: "Cancelada", COMPLETED: "Completada", NO_SHOW: "No asistio"
 };
 
 const statusVariant: Record<Booking["status"], "brand" | "success" | "muted" | "destructive"> = {
-  pending: "muted",
-  confirmed: "brand",
-  cancelled: "destructive",
-  completed: "success",
-  rescheduled: "brand"
+  HELD: "muted", PENDING: "muted", CONFIRMED: "brand", CANCELLED: "destructive", COMPLETED: "success", NO_SHOW: "destructive"
 };
 
 export function BookingsManager() {
-  const { items: bookings, setItems: setBookings, loading, error, setError, reload } = useResource<Booking>(
-    endpoints.bookings.list,
-    mockBookings
-  );
-  const { items: availability } = useResource<AvailabilityBlock>(endpoints.availabilityBlocks.list, mockAvailability);
+  const { items: bookings, setItems: setBookings, loading, error, setError, reload } = useResource<Booking>(endpoints.bookings.list);
+  const { items: availability } = useResource<AvailabilityBlock>(endpoints.availabilityBlocks.list);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   function replace(updated: Booking) {
-    setBookings((current) => current.map((b) => (b.bookingId === updated.bookingId ? updated : b)));
+    setBookings((current) => current.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
   }
 
   async function lifecycle(booking: Booking, action: "confirm" | "complete" | "cancel") {
-    const status: Booking["status"] = action === "confirm" ? "confirmed" : action === "complete" ? "completed" : "cancelled";
-    if (isMockMode()) {
-      replace({ ...booking, status });
-      return;
-    }
     setError(null);
-    setBusyId(booking.bookingId);
+    setBusyId(booking.id);
     try {
-      const updated = await apiPost<Booking>(endpoints.bookings[action](booking.bookingId));
+      const updated = await apiPatch<Booking>(endpoints.bookings[action](booking.id), { version: booking.version });
       replace(updated);
     } catch (err) {
       setError(errMessage(err, "No se pudo actualizar la reserva."));
@@ -80,19 +63,10 @@ export function BookingsManager() {
   async function rescheduleBooking() {
     if (!selectedBooking || !selectedSlot) return;
     const target = selectedBooking;
-    if (isMockMode()) {
-      const slot = availability.find((block) => String(block.availabilityBlockId) === selectedSlot);
-      if (!slot) return;
-      replace({ ...target, bookingDate: slot.blockDate, startTime: slot.startTime, status: "rescheduled" });
-      setSelectedBooking(null);
-      return;
-    }
     setError(null);
-    setBusyId(target.bookingId);
+    setBusyId(target.id);
     try {
-      const updated = await apiPost<Booking>(endpoints.bookings.reschedule(target.bookingId), {
-        newAvailabilityBlockId: Number(selectedSlot)
-      });
+      const updated = await apiPatch<Booking>(endpoints.bookings.reschedule(target.id), { version: target.version, startAt: selectedSlot });
       replace(updated);
       setSelectedBooking(null);
     } catch (err) {
@@ -152,14 +126,14 @@ export function BookingsManager() {
                 </TableRow>
               ) : (
                 bookings.map((booking) => (
-                  <TableRow key={booking.bookingId} className={busyId === booking.bookingId ? "opacity-50" : undefined}>
-                    <TableCell className="pl-6 font-medium">{booking.customerName}</TableCell>
+                  <TableRow key={booking.id} className={busyId === booking.id ? "opacity-50" : undefined}>
+                    <TableCell className="pl-6 font-medium">{booking.customer.firstName} {booking.customer.lastName}</TableCell>
                     <TableCell className="text-muted-foreground">{booking.serviceName}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {booking.bookingDate} · <span className="font-mono text-xs">{booking.startTime.slice(0, 5)}</span>
+                      {new Date(booking.startAt).toLocaleString("es-CR")}
                     </TableCell>
                     <TableCell><Badge variant={statusVariant[booking.status]}>{statusLabels[booking.status]}</Badge></TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{booking.trackingCode}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">v{booking.version}</TableCell>
                     <TableCell className="pr-6 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -191,26 +165,26 @@ export function BookingsManager() {
         {selectedBooking ? (
           <div className="space-y-4">
             <div className="rounded-lg bg-muted/60 p-4 text-sm">
-              <strong className="block">{selectedBooking.customerName}</strong>
+              <strong className="block">{selectedBooking.customer.firstName} {selectedBooking.customer.lastName}</strong>
               <span className="text-muted-foreground">{selectedBooking.serviceName}</span>
               <span className="mt-1 block text-muted-foreground">
-                {selectedBooking.bookingDate} · {selectedBooking.startTime.slice(0, 5)}
+                {new Date(selectedBooking.startAt).toLocaleString("es-CR")}
               </span>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-slot">Nuevo horario disponible</Label>
               <select id="new-slot" className={selectClass} value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)}>
                 <option value="">Selecciona un horario</option>
-                {availability.filter((b) => !b.isReserved).map((block) => (
-                  <option key={block.availabilityBlockId} value={block.availabilityBlockId}>
-                    {block.blockDate} · {block.startTime} a {block.endTime}
+                {availability.map((block) => (
+                  <option key={block.id} value={block.startsAt}>
+                    {new Date(block.startsAt).toLocaleString("es-CR")} a {new Date(block.endsAt).toLocaleTimeString("es-CR")}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setSelectedBooking(null)}>Cancelar</Button>
-              <Button onClick={rescheduleBooking} disabled={busyId === selectedBooking.bookingId}>Guardar</Button>
+              <Button onClick={rescheduleBooking} disabled={busyId === selectedBooking.id}>Guardar</Button>
             </div>
           </div>
         ) : null}

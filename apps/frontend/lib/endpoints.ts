@@ -14,7 +14,6 @@ export const endpoints = {
   tenant: {
     current: "/tenant/current"
   },
-  businessTypes: "/business-types",
   serviceCategories: {
     list: "/service-categories",
     byId: (id: number | string) => `/service-categories/${id}`
@@ -27,7 +26,7 @@ export const endpoints = {
     list: "/locations",
     byId: (id: number | string) => `/locations/${id}`
   },
-  businessHours: "/business-hours",
+  businessHours: (locationId: string) => `/locations/${locationId}/business-hours`,
   availabilityBlocks: {
     list: "/availability-blocks",
     byId: (id: number | string) => `/availability-blocks/${id}`
@@ -60,8 +59,8 @@ export const endpoints = {
     bookings: (slug: string) => `/public/${slug}/bookings`
   },
   track: {
-    get: (code: string) => `/track/${code}`,
-    cancel: (code: string) => `/track/${code}/cancel`,
-    reschedule: (code: string) => `/track/${code}/reschedule`
+    get: (code: string) => `/public/tracking/${code}`,
+    cancel: (code: string) => `/public/tracking/${code}/cancel`,
+    reschedule: (code: string) => `/public/tracking/${code}/reschedule`
   }
 } as const;
