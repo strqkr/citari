@@ -44,6 +44,7 @@ jobs:
       JWT_ISSUER: https://ci.citari.test
       JWT_AUDIENCE: citari-ci
       JWT_SECRET: ci-integration-secret-with-at-least-32-bytes
+      MFA_ENCRYPTION_KEY: ci-mfa-encryption-secret-with-32-bytes
       E2E_SUPERADMIN_PASSWORD: CiTemporaryPassword2026A
     steps:
       - uses: actions/checkout@v4

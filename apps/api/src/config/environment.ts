@@ -8,6 +8,7 @@ const environmentSchema = z.object({
   JWT_ISSUER: z.url(),
   JWT_AUDIENCE: z.string().min(1),
   JWT_SECRET: z.string().min(32),
+  MFA_ENCRYPTION_KEY: z.string().min(32),
   CORS_ORIGINS: z.string().default("http://localhost:3000")
 });
 

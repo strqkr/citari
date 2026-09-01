@@ -32,5 +32,6 @@ apply all Prisma migrations to an empty PostgreSQL 17 database, prove bootstrap
 idempotency, and build both production Docker images.
 
 See `docs/development.md`, `docs/deployment.md`, and
-`docs/postgresql-migration-runbook.md` for operating procedures. Never use
+`docs/postgresql-migration-runbook.md` for operating procedures and
+`docs/security.md` for the authentication and recovery model. Never use
 `prisma db push` on a shared environment and never commit credentials.
