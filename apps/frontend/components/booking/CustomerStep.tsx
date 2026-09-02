@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { endpoints } from "@/lib/endpoints";
 const textareaClass =
   "flex min-h-[88px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30";
 
-type BookingResponse = { bookingId: string; status: string; trackingToken: string };
+type BookingResponse = { confirmationNonce: string; expiresAt: string };
 
 export function CustomerStep({ slug }: { slug: string }) {
   const router = useRouter();
@@ -20,20 +20,35 @@ export function CustomerStep({ slug }: { slug: string }) {
   const serviceId = searchParams.get("service") || "";
   const startAt = searchParams.get("startAt") || "";
   const locationId = searchParams.get("location") || "";
+  const [holdToken, setHoldToken] = useState<string | null>(null);
+  const [holdExpiresAt, setHoldExpiresAt] = useState<string | null>(null);
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const bookingKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    setHoldToken(fragment.get("hold") || "");
+    setHoldExpiresAt(fragment.get("expires"));
+    history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  }, []);
 
   function update(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
+    bookingKey.current = null;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
-    if (!serviceId || !startAt || !locationId) {
-      setError("Falta informacion del horario seleccionado. Volve a elegir fecha y hora.");
+    if (!serviceId || !startAt || !locationId || !holdToken) {
+      setError("La retención del horario no es válida. Vuelve a elegir fecha y hora.");
+      return;
+    }
+    if (holdExpiresAt && new Date(holdExpiresAt) <= new Date()) {
+      setError("La retención venció. Vuelve a elegir un horario disponible.");
       return;
     }
 
@@ -43,6 +58,7 @@ export function CustomerStep({ slug }: { slug: string }) {
         serviceId,
         locationId,
         startAt,
+        holdToken,
         customer: {
           firstName: form.firstName,
           lastName: form.lastName,
@@ -51,12 +67,14 @@ export function CustomerStep({ slug }: { slug: string }) {
           consent: true
         },
         customerNotes: form.notes || undefined
-      }, crypto.randomUUID());
+      }, bookingKey.current ??= crypto.randomUUID());
 
-      const params = new URLSearchParams({ name: form.firstName, code: booking.trackingToken });
-      router.push(`/book/${slug}/confirmation?${params.toString()}`);
+      router.push(`/book/${slug}/confirmation#${new URLSearchParams({ nonce: booking.confirmationNonce }).toString()}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail || err.title : "No se pudo crear la reserva. Intenta de nuevo.");
+      if (err instanceof ApiError && err.status === 410) setError("La retención venció. Vuelve a elegir el horario.");
+      else if (err instanceof ApiError && err.status === 409) setError("El horario ya no está disponible. Elige uno nuevo.");
+      else if (err instanceof ApiError && err.status === 429) setError("Hay demasiados intentos. Espera unos minutos.");
+      else setError(err instanceof ApiError ? err.detail || err.title : "No se pudo crear la reserva. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -71,7 +89,7 @@ export function CustomerStep({ slug }: { slug: string }) {
 
       <div className="mt-6 flex items-start gap-3 rounded-xl bg-primary/5 px-4 py-3 text-sm text-foreground/80">
         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-        <span>Recibiras un codigo para consultar, cancelar o reagendar tu reserva sin crear cuenta.</span>
+        <span>{holdExpiresAt ? `Horario retenido hasta ${new Date(holdExpiresAt).toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}. ` : ""}Recibirás acceso para consultar tu reserva sin crear cuenta.</span>
       </div>
 
       <form onSubmit={submit} className="mt-6 space-y-4">
@@ -104,16 +122,16 @@ export function CustomerStep({ slug }: { slug: string }) {
           />
         </div>
 
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
         <div className="flex items-center justify-between gap-3 pt-2">
           <Link
-            href={`/book/${slug}/datetime?service=${serviceId}`}
+            href={`/book/${slug}/datetime?service=${encodeURIComponent(serviceId)}&location=${encodeURIComponent(locationId)}`}
             className={buttonVariants({ variant: "outline" })}
           >
             Volver
           </Link>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || holdToken === null || !holdToken}>
             {loading ? "Reservando..." : "Confirmar reserva"}
           </Button>
         </div>

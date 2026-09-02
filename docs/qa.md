@@ -11,12 +11,14 @@ superadmin tenant activation, the mandatory superadmin password change and MFA
 enrollment, TOTP replay denial, owner authentication, password reset and session
 revocation, reset replay denial, login throttling with `Retry-After`,
 authenticated profile access, a real catalog write, cross-tenant mutation
-denial, refresh-token rotation, reuse detection, and family revocation. It uses
+denial, two simultaneous holds for one slot, idempotent concurrent booking
+replay, one-use confirmation, safe-body tracking lookup, refresh-token rotation,
+reuse detection, and family revocation. It uses
 unique records in the disposable CI database and does not depend on fixtures or
 seed data.
 
 Unit tests remain responsible for edge cases and deterministic branch coverage.
 The integration gate is intentionally small and high-value. Staging release
-checks add real SMTP receipt, public booking, tracking, accessibility, load,
+checks add real SMTP receipt, public booking accessibility, load,
 backup/restore, proxy-address validation, and observability verification as
 described in the production MVP blueprint.

@@ -104,6 +104,36 @@ between the public client and the API. Leave it at zero for a directly exposed
 API. A value that is too high lets callers forge the address used for audit and
 rate limiting; a value that is too low groups traffic under the proxy address.
 
+## Public booking integrity
+
+- Availability includes service buffers, active bookings, availability blocks,
+  and unexpired slot holds. The customer must choose an explicit active
+  location before availability is calculated.
+- Continuing from a slot acquires a ten-minute hold. PostgreSQL serializes all
+  writes for the same tenant and location with a transaction-scoped advisory
+  lock, while exclusion constraints reject overlapping active holds and
+  bookings at the database boundary.
+- Administrative availability blocks acquire that same tenant/location lock
+  and are rejected when they overlap an active booking or hold, closing the
+  cross-table race in both directions.
+- Booking creation requires the exact hold token and atomically consumes it.
+  The token is random, stored only as a SHA-256 digest, carried in the browser
+  URL fragment, and removed from browser history immediately.
+- Public hold and booking commands require idempotency keys. Concurrent replay
+  returns the same encrypted stored result; reuse with another payload returns
+  `409`. Plaintext hold, tracking, and confirmation tokens are never stored in
+  the idempotency response JSON column.
+- Booking creation returns only a 15-minute confirmation nonce. Its encrypted
+  payload releases the tracking credential exactly once. Retrying the same
+  idempotent command returns the same encrypted result after a lost response;
+  replay under another key returns `410`.
+- The supported browser tracking flow sends the case-sensitive credential in a
+  POST body. It is never placed in a query string, browser-visible path,
+  referrer, or server-rendered link.
+- Expired holds are marked before every serialized scheduling command. Tenant-
+  scoped maintenance removes expired holds, confirmations, and idempotency
+  records without bypassing RLS.
+
 ## Key management
 
 `MFA_ENCRYPTION_KEY` and `NOTIFICATION_ENCRYPTION_KEY` must be independent from
@@ -132,5 +162,6 @@ expiry and replay, password replacement, MFA enrollment, code-step replay,
 session revocation, outbox claiming/retry, cleanup, and progressive throttling.
 The PostgreSQL HTTP test exercises bootstrap, password change, MFA enrollment,
 email verification, password reset, token replay rejection, session revocation,
-login throttling with `Retry-After`, tenant activation/isolation, and refresh
-family revocation against a newly migrated PostgreSQL 17 database.
+login throttling with `Retry-After`, tenant activation/isolation, concurrent
+slot holds, idempotent booking replay, one-use confirmation, tracking lookup,
+and refresh-family revocation against a newly migrated PostgreSQL 17 database.

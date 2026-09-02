@@ -16,6 +16,10 @@ performance, rollback, and restore evidence has passed in staging.
   identifiers applied only at domain and presentation boundaries.
 - Money uses fixed-precision decimal values plus an ISO 4217 currency code.
 - IDs and externally visible booking references remain stable through cutover.
+- Existing bookings retain their historical occupied range and zero buffer
+  snapshot because the former system did not persist immutable buffer values.
+  New bookings snapshot buffers and protect the full occupied range. Never
+  infer historical buffers from mutable service configuration during cutover.
 
 ## Delivery phases
 
@@ -43,6 +47,7 @@ fields. Additionally verify:
 
 - no orphaned foreign keys;
 - no overlapping active reservations;
+- no overlapping active slot holds or hold/booking ranges after expiry cleanup;
 - booking status and monetary totals match;
 - normalized emails and public references remain unique;
 - all tenant-owned rows are inaccessible from a different tenant context;
