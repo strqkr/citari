@@ -11,6 +11,10 @@ const tokensSchema = z.object({ accessToken: z.string(), refreshToken: z.string(
 const registrationResponseSchema = z.object({ tenantId: z.uuid(), userId: z.uuid(), status: z.string() });
 const profileSchema = z.object({ email: z.email(), tenantRole: z.string().nullable() });
 const categorySchema = z.object({ id: z.uuid() });
+const entitySchema = z.object({ id: z.uuid() });
+const holdSchema = z.object({ holdToken: z.string(), expiresAt: z.string() });
+const bookingResultSchema = z.object({ confirmationNonce: z.string(), expiresAt: z.string() });
+const confirmationResultSchema = z.object({ trackingToken: z.string(), booking: z.object({ id: z.uuid(), status: z.string() }) });
 const problemSchema = z.object({ status: z.number() });
 const readySchema = z.object({ status: z.literal("ready") });
 const challengeSchema = z.object({ challengeToken: z.string(), status: z.string() });
@@ -92,6 +96,73 @@ async function main(): Promise<void> {
       .post("/api/v1/service-categories")
       .set("Authorization", firstAuthorization)
       .send({ name: "Tenant-private category" }), 201).body);
+
+    const location = entitySchema.parse(status(await http
+      .post("/api/v1/locations")
+      .set("Authorization", firstAuthorization)
+      .send({ name: "Integration location", timezone: "America/Costa_Rica", isMain: true }), 201).body);
+    status(await http
+      .put(`/api/v1/locations/${location.id}/business-hours`)
+      .set("Authorization", firstAuthorization)
+      .send({ hours: Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isClosed: false, openTime: "00:00", closeTime: "23:59" })) }), 200);
+    const catalogService = entitySchema.parse(status(await http
+      .post("/api/v1/services")
+      .set("Authorization", firstAuthorization)
+      .send({ categoryId: category.id, name: "Buffered integration service", durationMinutes: 30, bufferBeforeMinutes: 10, bufferAfterMinutes: 15, price: 2500, currency: "CRC", showPrice: true }), 201).body);
+
+    const slotStart = new Date(Date.now() + 48 * 60 * 60_000);
+    slotStart.setUTCHours(18, 0, 0, 0);
+    const holdBody = { serviceId: catalogService.id, locationId: location.id, startAt: slotStart.toISOString() };
+    const firstHoldKey = randomUUID();
+    const competingHoldKey = randomUUID();
+    const competingHolds = await Promise.all([
+      http.post(`/api/v1/public/${first.slug}/holds`).set("Idempotency-Key", firstHoldKey).send(holdBody),
+      http.post(`/api/v1/public/${first.slug}/holds`).set("Idempotency-Key", competingHoldKey).send(holdBody)
+    ]);
+    assert.deepEqual(competingHolds.map((response) => response.status).sort(), [201, 409]);
+    const winningResponse = competingHolds.find((response) => response.status === 201);
+    assert.ok(winningResponse);
+    const winningHoldKey = competingHolds[0].status === 201 ? firstHoldKey : competingHoldKey;
+    const hold = holdSchema.parse(winningResponse.body);
+    const replayedHold = holdSchema.parse(status(await http.post(`/api/v1/public/${first.slug}/holds`).set("Idempotency-Key", winningHoldKey).send(holdBody), 201).body);
+    assert.equal(replayedHold.holdToken, hold.holdToken);
+
+    const publicBookingBody = {
+      ...holdBody,
+      holdToken: hold.holdToken,
+      customer: { firstName: "Concurrent", lastName: "Customer", email: `booking-${randomUUID()}@example.test`, phone: "88888888", consent: true }
+    };
+    const bookingKey = randomUUID();
+    const concurrentBookings = await Promise.all([
+      http.post(`/api/v1/public/${first.slug}/bookings`).set("Idempotency-Key", bookingKey).send(publicBookingBody),
+      http.post(`/api/v1/public/${first.slug}/bookings`).set("Idempotency-Key", bookingKey).send(publicBookingBody)
+    ]);
+    assert.deepEqual(concurrentBookings.map((response) => response.status), [201, 201]);
+    const firstBookingResult = bookingResultSchema.parse(concurrentBookings[0].body);
+    const secondBookingResult = bookingResultSchema.parse(concurrentBookings[1].body);
+    assert.equal(firstBookingResult.confirmationNonce, secondBookingResult.confirmationNonce);
+    assert.equal("trackingToken" in concurrentBookings[0].body, false);
+    const confirmationKey = randomUUID();
+    const confirmation = confirmationResultSchema.parse(status(await http.post(`/api/v1/public/${first.slug}/booking-confirmation`).set("Idempotency-Key", confirmationKey).send({ confirmationNonce: firstBookingResult.confirmationNonce }), 200).body);
+    const confirmationReplay = confirmationResultSchema.parse(status(await http.post(`/api/v1/public/${first.slug}/booking-confirmation`).set("Idempotency-Key", confirmationKey).send({ confirmationNonce: firstBookingResult.confirmationNonce }), 200).body);
+    assert.equal(confirmationReplay.trackingToken, confirmation.trackingToken);
+    status(await http.post(`/api/v1/public/${first.slug}/booking-confirmation`).set("Idempotency-Key", randomUUID()).send({ confirmationNonce: firstBookingResult.confirmationNonce }), 410);
+    status(await http.post("/api/v1/public/tracking/lookup").send({ token: confirmation.trackingToken }), 200);
+    const bookingCount = await prisma.withTenant(firstRegistration.tenantId, (tx) => tx.booking.count({ where: { tenantId: firstRegistration.tenantId, startAt: slotStart } }));
+    assert.equal(bookingCount, 1);
+    status(await http
+      .post("/api/v1/availability-blocks")
+      .set("Authorization", firstAuthorization)
+      .send({
+        locationId: location.id,
+        startsAt: new Date(slotStart.getTime() - 10 * 60_000).toISOString(),
+        endsAt: new Date(slotStart.getTime() + 45 * 60_000).toISOString(),
+        reason: "Must not overlap a buffered booking"
+      }), 409);
+    const encryptedReplay = await prisma.withTenant(firstRegistration.tenantId, (tx) => tx.idempotencyKey.findFirst({ where: { tenantId: firstRegistration.tenantId, scope: `public-booking:${firstRegistration.tenantId}` } }));
+    assert.ok(encryptedReplay?.responseBodyEncrypted);
+    assert.equal(encryptedReplay.responseBody, null);
+    assert.equal(encryptedReplay.responseBodyEncrypted.includes(firstBookingResult.confirmationNonce), false);
 
     const secondLogin = tokensSchema.parse(status(await http.post("/api/v1/auth/login").send({ email: second.ownerEmail, password: second.password }), 200).body);
     status(await http

@@ -28,5 +28,14 @@ export class SecurityMaintenanceService implements OnApplicationBootstrap, OnMod
         { attempts: { gte: 10 }, availableAt: { lt: retentionCutoff } }
       ] } })
     ]);
+    const tenants = await this.prisma.tenant.findMany({ select: { id: true } });
+    for (const tenant of tenants) {
+      await this.prisma.withTenant(tenant.id, async (tx) => {
+        await tx.slotHold.updateMany({ where: { status: "ACTIVE", expiresAt: { lte: now } }, data: { status: "EXPIRED" } });
+        await tx.slotHold.deleteMany({ where: { status: { in: ["CONSUMED", "RELEASED", "EXPIRED"] }, updatedAt: { lt: retentionCutoff } } });
+        await tx.bookingConfirmation.deleteMany({ where: { OR: [{ expiresAt: { lt: retentionCutoff } }, { consumedAt: { lt: retentionCutoff } }] } });
+        await tx.idempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } });
+      });
+    }
   }
 }

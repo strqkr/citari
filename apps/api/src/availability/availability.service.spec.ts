@@ -13,7 +13,8 @@ function setup(overrides: Record<string, unknown> = {}) {
     ...overrides
   };
   const prisma = { withTenant: vi.fn((_tenantId: string, operation: (client: typeof tx) => unknown) => operation(tx)) };
-  return { service: new AvailabilityService(prisma as never), tx };
+  const scheduling = { lockLocation: vi.fn(), assertBlockAvailable: vi.fn() };
+  return { service: new AvailabilityService(prisma as never, scheduling as never), scheduling, tx };
 }
 
 describe("AvailabilityService", () => {
@@ -33,9 +34,11 @@ describe("AvailabilityService", () => {
   });
 
   it("creates a block only for an active tenant location", async () => {
-    const { service, tx } = setup();
+    const { service, scheduling, tx } = setup();
     const input = { locationId: "location", startsAt: new Date("2026-09-01T08:00:00Z"), endsAt: new Date("2026-09-01T09:00:00Z"), reason: "maintenance" };
     await expect(service.create("tenant", input)).resolves.toEqual({ id: "created" });
+    expect(scheduling.lockLocation).toHaveBeenCalledWith(tx, "tenant", "location");
+    expect(scheduling.assertBlockAvailable).toHaveBeenCalledWith(tx, { tenantId: "tenant", locationId: "location", startsAt: input.startsAt, endsAt: input.endsAt });
     expect(tx.availabilityBlock.create).toHaveBeenCalledWith({ data: { tenantId: "tenant", ...input } });
   });
 

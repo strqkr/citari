@@ -62,10 +62,16 @@ export const endpoints = {
   public: {
     tenant: (slug: string) => `/public/${slug}`,
     services: (slug: string) => `/public/${slug}/services`,
+    locations: (slug: string) => `/public/${slug}/locations`,
     availability: (slug: string) => `/public/${slug}/availability`,
+    holds: (slug: string) => `/public/${slug}/holds`,
+    bookingConfirmation: (slug: string) => `/public/${slug}/booking-confirmation`,
     bookings: (slug: string) => `/public/${slug}/bookings`
   },
   track: {
+    lookup: "/public/tracking/lookup",
+    cancelSafe: "/public/tracking/cancel",
+    rescheduleSafe: "/public/tracking/reschedule",
     get: (code: string) => `/public/tracking/${code}`,
     cancel: (code: string) => `/public/tracking/${code}/cancel`,
     reschedule: (code: string) => `/public/tracking/${code}/reschedule`

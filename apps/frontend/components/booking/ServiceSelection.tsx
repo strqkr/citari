@@ -5,8 +5,11 @@ import { useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import type { Service } from "@/types/service";
 
-export function ServiceSelection({ slug, services }: { slug: string; services: Service[] }) {
+type PublicLocation = { id: string; name: string; addressLine1: string | null; province: string | null; canton: string | null; isMain: boolean };
+
+export function ServiceSelection({ slug, services, locations }: { slug: string; services: Service[]; locations: PublicLocation[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(locations.length === 1 ? locations[0]?.id ?? null : null);
   const selected = services.find((service) => service.id === selectedId);
 
   return (
@@ -58,20 +61,29 @@ export function ServiceSelection({ slug, services }: { slug: string; services: S
         )}
       </div>
 
+      <div className="mt-8">
+        <h2 className="font-serif text-2xl font-medium">Elige una sede</h2>
+        <p className="mt-1 text-sm text-muted-foreground">La disponibilidad y la zona horaria dependen de la sede.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {locations.map((location) => <button type="button" key={location.id} aria-pressed={selectedLocationId === location.id} onClick={() => setSelectedLocationId(location.id)} className={`min-h-20 rounded-xl border p-4 text-left ${selectedLocationId === location.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "bg-card hover:bg-accent/60"}`}><strong className="block">{location.name}</strong><span className="mt-1 block text-sm text-muted-foreground">{[location.addressLine1, location.canton, location.province].filter(Boolean).join(", ") || "Dirección por confirmar"}</span></button>)}
+          {locations.length === 0 ? <div role="status" className="rounded-xl border p-4 text-sm text-muted-foreground">Este negocio aún no tiene una sede disponible para reservas.</div> : null}
+        </div>
+      </div>
+
       <div className="mt-8 flex items-center justify-between gap-3">
         <Link href={`/book/${slug}`} className={buttonVariants({ variant: "outline" })}>
           Volver
         </Link>
-        {selected ? (
+        {selected && selectedLocationId ? (
           <Link
-            href={`/book/${slug}/datetime?service=${selected.id}`}
+            href={`/book/${slug}/datetime?service=${selected.id}&location=${selectedLocationId}`}
             className={buttonVariants()}
           >
             Continuar
           </Link>
         ) : (
           <span className={`${buttonVariants()} pointer-events-none opacity-50`}>
-            Selecciona un servicio
+            {!selected ? "Selecciona un servicio" : "Selecciona una sede"}
           </span>
         )}
       </div>

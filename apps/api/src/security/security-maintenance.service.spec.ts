@@ -2,17 +2,25 @@ import { describe, expect, it, vi } from "vitest";
 import { SecurityMaintenanceService } from "./security-maintenance.service.js";
 
 describe("SecurityMaintenanceService", () => {
-  it("removes expired ephemeral security data with bounded delivery retention", async () => {
+  it("cleans global records and uses tenant-scoped transactions for RLS data", async () => {
+    const tx = {
+      slotHold: { updateMany: vi.fn().mockReturnValue("expire-holds"), deleteMany: vi.fn().mockReturnValue("holds") },
+      bookingConfirmation: { deleteMany: vi.fn().mockReturnValue("confirmations") },
+      idempotencyKey: { deleteMany: vi.fn().mockReturnValue("idempotency") }
+    };
     const prisma = {
       rateLimitBucket: { deleteMany: vi.fn().mockReturnValue("rate") },
       authChallenge: { deleteMany: vi.fn().mockReturnValue("challenge") },
       emailDelivery: { deleteMany: vi.fn().mockReturnValue("email") },
-      $transaction: vi.fn()
+      tenant: { findMany: vi.fn().mockResolvedValue([{ id: "tenant" }]) },
+      withTenant: vi.fn((_id: string, operation: (client: typeof tx) => unknown) => operation(tx)),
+      $transaction: vi.fn().mockResolvedValue([])
     };
-    const now = new Date("2030-01-31T00:00:00Z");
-    await new SecurityMaintenanceService(prisma as never).cleanup(now);
+    await new SecurityMaintenanceService(prisma as never).cleanup(new Date("2030-02-01T00:00:00Z"));
     expect(prisma.$transaction).toHaveBeenCalledWith(["rate", "challenge", "email"]);
-    expect(prisma.rateLimitBucket.deleteMany).toHaveBeenCalledWith({ where: { expiresAt: { lt: now } } });
-    expect(prisma.emailDelivery.deleteMany).toHaveBeenCalledWith({ where: { OR: expect.arrayContaining([{ sentAt: { lt: new Date("2030-01-01T00:00:00Z") } }]) } });
+    expect(prisma.withTenant).toHaveBeenCalledWith("tenant", expect.any(Function));
+    expect(tx.slotHold.updateMany).toHaveBeenCalled();
+    expect(tx.bookingConfirmation.deleteMany).toHaveBeenCalled();
+    expect(tx.idempotencyKey.deleteMany).toHaveBeenCalled();
   });
 });
