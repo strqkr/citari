@@ -1,8 +1,49 @@
 # Citari production MVP blueprint
 
-Status: approved direction  
+Status: active execution — not approved for production
 Owner: `strqkr`
 Target: production-ready multi-tenant booking platform  
+Last evidence audit: 2026-09-02
+
+## Execution governance
+
+Every numbered item is an independently reviewable deliverable. An item is
+complete only when its implementation, automated evidence, operational
+documentation, and rollback or recovery behavior are merged into `main`.
+Code existing locally, a design proposal, or a passing unit test alone does not
+close an item. P0 items are release blockers; P1 items are part of the MVP
+unless the go-live review records a named owner, deadline, and accepted risk.
+
+Evidence must be durable and linked from a pull request: tests and scan reports
+from CI, migration output, a runbook or ADR, and staging evidence where the
+behavior depends on managed infrastructure. The final go-live review audits all
+200 items one by one; this document is not itself a production approval.
+
+### Verified baseline on `main`
+
+| Capability | Current evidence | Remaining boundary |
+|---|---|---|
+| PostgreSQL + Prisma foundation | PostgreSQL 17 Compose/CI service, immutable migrations, Prisma schema, RLS/native constraints, migration runbook | Staging cutover rehearsal, backup/restore and managed-database evidence |
+| Runtime architecture | pnpm workspace, NestJS/Fastify API, Next.js BFF, strict configuration, RFC 7807 errors | Contract artifact/versioning and full domain dependency enforcement |
+| Production initialization | No seed path; audited idempotent Andrew bootstrap; forced password change, verification and MFA | Managed-secret/bootstrap ceremony in staging and automatic credential removal evidence |
+| Identity security | HttpOnly BFF cookies, rotated hashed refresh tokens, family reuse revocation, verification/reset delivery, throttling | CSRF origin enforcement, session inventory, broader privileged step-up coverage |
+| Booking integrity | Server availability, immutable buffers, location locks, database exclusions, expiring holds, encrypted idempotent replay | Secondary customer verification, DST/property testing and full policy model |
+| Public UX | Explicit location, real availability, hold recovery, nonce confirmation, safe-body tracking, differentiated failures | Accessible end-to-end audit, calendar invitations and secondary verification |
+| Automated gate | `pnpm quality`, enforced unit coverage, clean PostgreSQL bootstrap/HTTP integration, concurrent booking test, two production image builds | Playwright/axe/visual gates and security/supply-chain scans |
+| Git provenance | Reachable history and GitHub contributors limited to `strqkr` and `lunqdd`; no coauthor trailers | Branch protection, signed release and provenance enforcement |
+
+### Next P0 execution order
+
+1. Customer tracking verification and CSRF/origin protections.
+2. Booking state-machine, timezone/DST and availability-policy completion.
+3. OpenAPI contract artifact plus compatibility and Playwright golden paths.
+4. Accessibility remediation and automated axe gate for critical journeys.
+5. Supply-chain hardening: immutable actions/images, CodeQL, dependency and
+   container scanning, SBOM, signed provenance, and protected publishing.
+6. Infrastructure, staging promotion, backups/PITR, restore evidence,
+   OpenTelemetry, SLOs, alerts, and incident runbooks.
+7. Privacy workflows, retention policy, final threat model, and the item-by-item
+   go-live review.
 
 ## Product decision
 
