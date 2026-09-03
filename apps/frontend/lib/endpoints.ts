@@ -49,6 +49,8 @@ export const endpoints = {
     confirm: (id: number | string) => `/bookings/${id}/confirm`,
     cancel: (id: number | string) => `/bookings/${id}/cancel`,
     complete: (id: number | string) => `/bookings/${id}/complete`,
+    noShow: (id: number | string) => `/bookings/${id}/no-show`,
+    availability: (id: number | string) => `/bookings/${id}/availability`,
     reschedule: (id: number | string) => `/bookings/${id}/reschedule`
   },
   reports: {

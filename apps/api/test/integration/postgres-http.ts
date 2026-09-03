@@ -12,6 +12,7 @@ const registrationResponseSchema = z.object({ tenantId: z.uuid(), userId: z.uuid
 const profileSchema = z.object({ email: z.email(), tenantRole: z.string().nullable() });
 const categorySchema = z.object({ id: z.uuid() });
 const entitySchema = z.object({ id: z.uuid() });
+const availabilitySchema = z.object({ timezone: z.string(), slots: z.array(z.coerce.date()) });
 const holdSchema = z.object({ holdToken: z.string(), expiresAt: z.string() });
 const bookingResultSchema = z.object({ confirmationNonce: z.string(), expiresAt: z.string() });
 const confirmationResultSchema = z.object({ trackingToken: z.string(), booking: z.object({ id: z.uuid(), status: z.string() }) });
@@ -110,10 +111,20 @@ async function main(): Promise<void> {
     const catalogService = entitySchema.parse(status(await http
       .post("/api/v1/services")
       .set("Authorization", firstAuthorization)
-      .send({ categoryId: category.id, name: "Buffered integration service", durationMinutes: 30, bufferBeforeMinutes: 10, bufferAfterMinutes: 15, price: 2500, currency: "CRC", showPrice: true }), 201).body);
+      .send({ categoryId: category.id, name: "Buffered integration service", durationMinutes: 30, bufferBeforeMinutes: 10, bufferAfterMinutes: 15, minimumLeadMinutes: 120, maximumAdvanceDays: 90, cancellationNoticeMinutes: 60, rescheduleNoticeMinutes: 120, slotIntervalMinutes: 15, price: 2500, currency: "CRC", showPrice: true }), 201).body);
 
     const slotStart = new Date(Date.now() + 48 * 60 * 60_000);
     slotStart.setUTCHours(18, 0, 0, 0);
+    const availabilityFrom = new Date(slotStart.getTime() - 60 * 60_000);
+    const availabilityTo = new Date(slotStart.getTime() + 2 * 60 * 60_000);
+    const availability = availabilitySchema.parse(status(await http.get(`/api/v1/public/${first.slug}/availability`).query({ serviceId: catalogService.id, locationId: location.id, from: availabilityFrom.toISOString(), to: availabilityTo.toISOString() }), 200).body);
+    assert.equal(availability.timezone, "America/Costa_Rica");
+    assert.ok(availability.slots.length > 0);
+    assert.ok(availability.slots.every((slot) => slot.getUTCSeconds() === 0 && slot.getUTCMinutes() % 15 === 0));
+    const tooSoon = new Date(Date.now() + 60 * 60_000);
+    tooSoon.setUTCSeconds(0, 0);
+    tooSoon.setUTCMinutes(Math.ceil(tooSoon.getUTCMinutes() / 15) * 15);
+    status(await http.post(`/api/v1/public/${first.slug}/holds`).set("Idempotency-Key", randomUUID()).send({ serviceId: catalogService.id, locationId: location.id, startAt: tooSoon.toISOString() }), 422);
     const holdBody = { serviceId: catalogService.id, locationId: location.id, startAt: slotStart.toISOString() };
     const firstHoldKey = randomUUID();
     const competingHoldKey = randomUUID();
@@ -162,6 +173,13 @@ async function main(): Promise<void> {
     status(await http.post("/api/v1/public/tracking/lookup").send({ token: confirmation.trackingToken, accessGrant: trackingGrant.accessGrant }), 200);
     const bookingCount = await prisma.withTenant(firstRegistration.tenantId, (tx) => tx.booking.count({ where: { tenantId: firstRegistration.tenantId, startAt: slotStart } }));
     assert.equal(bookingCount, 1);
+    const snapshot = await prisma.withTenant(firstRegistration.tenantId, (tx) => tx.booking.findFirstOrThrow({ where: { tenantId: firstRegistration.tenantId, id: confirmation.booking.id }, select: { serviceMinimumLeadMinutes: true, serviceMaximumAdvanceDays: true, cancellationNoticeMinutes: true, rescheduleNoticeMinutes: true, slotIntervalMinutes: true } }));
+    assert.deepEqual(snapshot, { serviceMinimumLeadMinutes: 120, serviceMaximumAdvanceDays: 90, cancellationNoticeMinutes: 60, rescheduleNoticeMinutes: 120, slotIntervalMinutes: 15 });
+    await assert.rejects(prisma.withTenant(firstRegistration.tenantId, (tx) => tx.$executeRaw`UPDATE "bookings" SET "status" = 'COMPLETED' WHERE "id" = ${confirmation.booking.id}::uuid`));
+    await assert.rejects(prisma.withTenant(firstRegistration.tenantId, async (tx) => {
+      await tx.$executeRaw`UPDATE "bookings" SET "status" = 'CONFIRMED' WHERE "id" = ${confirmation.booking.id}::uuid`;
+      await tx.$executeRaw`UPDATE "bookings" SET "status" = 'COMPLETED' WHERE "id" = ${confirmation.booking.id}::uuid`;
+    }));
     status(await http
       .post("/api/v1/availability-blocks")
       .set("Authorization", firstAuthorization)

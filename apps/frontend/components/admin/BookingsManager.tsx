@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClock, Check, CheckCheck, MoreHorizontal, X } from "lucide-react";
+import { CalendarClock, Check, CheckCheck, MoreHorizontal, UserX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,10 +17,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { apiPatch } from "@/lib/api";
+import { apiGet, apiPatch } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 import { errMessage, useResource } from "@/lib/resource";
-import type { AvailabilityBlock } from "@/types/availability";
+import type { AvailabilityResponse } from "@/types/availability";
 import type { Booking } from "@/types/booking";
 
 const statusLabels: Record<Booking["status"], string> = {
@@ -33,16 +33,17 @@ const statusVariant: Record<Booking["status"], "brand" | "success" | "muted" | "
 
 export function BookingsManager() {
   const { items: bookings, setItems: setBookings, loading, error, setError, reload } = useResource<Booking>(endpoints.bookings.list);
-  const { items: availability } = useResource<AvailabilityBlock>(endpoints.availabilityBlocks.list);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedSlot, setSelectedSlot] = useState("");
+  const [availableSlots, setAvailableSlots] = useState<AvailabilityResponse>({ timezone: "UTC", slots: [] });
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   function replace(updated: Booking) {
     setBookings((current) => current.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
   }
 
-  async function lifecycle(booking: Booking, action: "confirm" | "complete" | "cancel") {
+  async function lifecycle(booking: Booking, action: "confirm" | "complete" | "noShow" | "cancel") {
     setError(null);
     setBusyId(booking.id);
     try {
@@ -55,9 +56,20 @@ export function BookingsManager() {
     }
   }
 
-  function openReschedule(booking: Booking) {
+  async function openReschedule(booking: Booking) {
     setSelectedBooking(booking);
     setSelectedSlot("");
+    setAvailableSlots({ timezone: booking.location.timezone ?? "UTC", slots: [] });
+    setSlotsLoading(true);
+    try {
+      const from = new Date(), to = new Date(from.getTime() + 14 * 86_400_000);
+      const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      setAvailableSlots(await apiGet<AvailabilityResponse>(`${endpoints.bookings.availability(booking.id)}?${query}`));
+    } catch (err) {
+      setError(errMessage(err, "No se pudieron cargar horarios disponibles."));
+    } finally {
+      setSlotsLoading(false);
+    }
   }
 
   async function rescheduleBooking() {
@@ -143,13 +155,12 @@ export function BookingsManager() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem onClick={() => lifecycle(booking, "confirm")}><Check />Confirmar</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => lifecycle(booking, "complete")}><CheckCheck />Completar</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openReschedule(booking)}><CalendarClock />Reagendar</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => lifecycle(booking, "cancel")} className="text-destructive focus:text-destructive">
-                            <X />Cancelar
-                          </DropdownMenuItem>
+                          {booking.status === "HELD" || booking.status === "PENDING" ? <DropdownMenuItem onClick={() => lifecycle(booking, "confirm")}><Check />Confirmar</DropdownMenuItem> : null}
+                          {booking.status === "CONFIRMED" ? <DropdownMenuItem onClick={() => lifecycle(booking, "complete")}><CheckCheck />Completar</DropdownMenuItem> : null}
+                          {booking.status === "CONFIRMED" ? <DropdownMenuItem onClick={() => lifecycle(booking, "noShow")}><UserX />Marcar ausencia</DropdownMenuItem> : null}
+                          {booking.status === "HELD" || booking.status === "PENDING" || booking.status === "CONFIRMED" ? <DropdownMenuItem onClick={() => openReschedule(booking)}><CalendarClock />Reagendar</DropdownMenuItem> : null}
+                          {booking.status === "HELD" || booking.status === "PENDING" || booking.status === "CONFIRMED" ? <DropdownMenuSeparator /> : null}
+                          {booking.status === "HELD" || booking.status === "PENDING" || booking.status === "CONFIRMED" ? <DropdownMenuItem onClick={() => lifecycle(booking, "cancel")} className="text-destructive focus:text-destructive"><X />Cancelar</DropdownMenuItem> : null}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -175,12 +186,14 @@ export function BookingsManager() {
               <Label htmlFor="new-slot">Nuevo horario disponible</Label>
               <select id="new-slot" className={selectClass} value={selectedSlot} onChange={(e) => setSelectedSlot(e.target.value)}>
                 <option value="">Selecciona un horario</option>
-                {availability.map((block) => (
-                  <option key={block.id} value={block.startsAt}>
-                    {new Date(block.startsAt).toLocaleString("es-CR")} a {new Date(block.endsAt).toLocaleTimeString("es-CR")}
+                {availableSlots.slots.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {new Intl.DateTimeFormat("es-CR", { timeZone: availableSlots.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(slot))}
                   </option>
                 ))}
               </select>
+              {slotsLoading ? <p className="text-xs text-muted-foreground">Cargando horarios reales...</p> : null}
+              {!slotsLoading && availableSlots.slots.length === 0 ? <p className="text-xs text-muted-foreground">No hay horarios disponibles en los proximos 14 dias.</p> : null}
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setSelectedBooking(null)}>Cancelar</Button>

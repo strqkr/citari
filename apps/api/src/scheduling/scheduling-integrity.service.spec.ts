@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, UnprocessableEntityException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { SchedulingIntegrityService } from "./scheduling-integrity.service.js";
 
@@ -14,6 +14,33 @@ describe("SchedulingIntegrityService", () => {
       occupiedStartAt: new Date("2030-01-01T09:50:00Z"),
       occupiedEndAt: new Date("2030-01-01T10:45:00Z")
     });
+  });
+
+  it("enforces lead time, horizon, local interval alignment, and IANA timezones", () => {
+    const policy = { minimumLeadMinutes: 60, maximumAdvanceDays: 30, slotIntervalMinutes: 15 };
+    const now = new Date("2030-01-01T10:00:00Z");
+    expect(() => service.assertPolicy(policy, new Date("2030-01-01T11:00:00Z"), "America/Costa_Rica", now)).not.toThrow();
+    expect(() => service.assertPolicy(policy, new Date("2030-01-01T10:45:00Z"), "America/Costa_Rica", now)).toThrow(UnprocessableEntityException);
+    expect(() => service.assertPolicy(policy, new Date("2030-02-01T11:00:00Z"), "America/Costa_Rica", now)).toThrow(UnprocessableEntityException);
+    expect(() => service.assertPolicy(policy, new Date("2030-01-01T11:07:00Z"), "America/Costa_Rica", now)).toThrow(UnprocessableEntityException);
+    expect(() => service.assertPolicy(policy, new Date("2030-01-01T11:00:00Z"), "Not/A-Timezone", now)).toThrow(UnprocessableEntityException);
+  });
+
+  it("aligns real instants across Costa Rica and DST boundaries", () => {
+    expect(service.firstAlignedSlot(new Date("2030-01-01T10:07:01Z"), "America/Costa_Rica", 15)).toEqual(new Date("2030-01-01T10:15:00Z"));
+    expect(service.firstAlignedSlot(new Date("2026-03-08T06:53:00Z"), "America/New_York", 15)).toEqual(new Date("2026-03-08T07:00:00Z"));
+    expect(service.firstAlignedSlot(new Date("2026-10-25T00:53:00Z"), "Europe/Madrid", 15)).toEqual(new Date("2026-10-25T01:00:00Z"));
+    expect(service.firstAlignedSlot(new Date("2026-11-01T05:53:00Z"), "America/New_York", 15)).toEqual(new Date("2026-11-01T06:00:00Z"));
+  });
+
+  it("generates aligned slots while excluding occupied ranges", () => {
+    const slots = service.availableSlots({
+      service: { durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, minimumLeadMinutes: 0, maximumAdvanceDays: 30, slotIntervalMinutes: 15 },
+      location: { id: "l", timezone: "UTC", businessHours: hours }, tenantTimezone: "UTC",
+      from: new Date("2030-01-01T09:00:00Z"), to: new Date("2030-01-01T11:00:00Z"), now: new Date("2030-01-01T08:00:00Z"),
+      occupied: [{ start: new Date("2030-01-01T09:30:00Z"), end: new Date("2030-01-01T10:00:00Z") }]
+    });
+    expect(slots).toEqual([new Date("2030-01-01T09:00:00Z"), new Date("2030-01-01T10:00:00Z"), new Date("2030-01-01T10:15:00Z"), new Date("2030-01-01T10:30:00Z")]);
   });
 
   it("serializes a location and expires stale holds before checking", async () => {

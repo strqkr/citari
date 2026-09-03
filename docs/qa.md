@@ -18,6 +18,13 @@ lookup, refresh-token rotation, reuse detection, and family revocation. It uses
 unique records in the disposable CI database and does not depend on fixtures or
 seed data.
 
+The same integration run verifies policy snapshots, rejects a hold inside the
+minimum lead time, proves generated slots follow the configured local interval,
+and attempts an illegal direct SQL status jump and premature completion to prove
+the PostgreSQL trigger is active. Deterministic unit tests cover all 36 state pairs, completion/no-show
+timing, customer notice windows, IANA validation, policy boundaries, and DST
+transitions in Costa Rica, New York, and Madrid.
+
 Unit tests remain responsible for edge cases and deterministic branch coverage.
 The integration gate is intentionally small and high-value. Staging release
 checks add real SMTP receipt, public booking accessibility, load,

@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { ConflictException, NotFoundException, UnauthorizedException, UnprocessableEntityException } from "@nestjs/common";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openSecret } from "../common/secret-box.js";
 import { SchedulingIntegrityService } from "../scheduling/scheduling-integrity.service.js";
 import { TrackingService } from "./tracking.service.js";
@@ -15,6 +15,8 @@ describe("TrackingService", () => {
   let service: TrackingService;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2029-01-01T09:00:00Z"));
     prisma = {
       booking: { findFirst: vi.fn(), updateMany: vi.fn(), findFirstOrThrow: vi.fn() },
       bookingPublicToken: { create: vi.fn(), findFirst: vi.fn() },
@@ -30,6 +32,8 @@ describe("TrackingService", () => {
     notifications = { enqueueBookingAccess: vi.fn() };
     service = new TrackingService(prisma, new SchedulingIntegrityService(), notifications as never, env as never);
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("stores only a digest and returns the one-time plaintext token", async () => {
     prisma.booking.findFirst.mockResolvedValue({ id: "b" });
@@ -107,7 +111,7 @@ describe("TrackingService", () => {
 
   it("cancels with optimistic concurrency, null actor, history and audit", async () => {
     authorize();
-    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "CONFIRMED" });
+    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "CONFIRMED", startAt: new Date("2030-01-01T10:00:00Z"), cancellationNoticeMinutes: 0 });
     prisma.booking.updateMany.mockResolvedValue({ count: 1 });
     prisma.booking.findFirstOrThrow.mockResolvedValue({ id: "b", status: "CANCELLED" });
     await expect(service.cancel(token, grant, 4, "customer request")).resolves.toMatchObject({ status: "CANCELLED" });
@@ -116,20 +120,20 @@ describe("TrackingService", () => {
 
   it("rejects terminal public cancellation and concurrent writes", async () => {
     authorize();
-    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "COMPLETED" });
+    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "COMPLETED", startAt: new Date("2030-01-01T10:00:00Z"), cancellationNoticeMinutes: 0 });
     await expect(service.cancel(token, grant, 1)).rejects.toBeInstanceOf(UnprocessableEntityException);
-    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "PENDING" });
+    prisma.booking.findFirst.mockResolvedValue({ id: "b", status: "PENDING", startAt: new Date("2030-01-01T10:00:00Z"), cancellationNoticeMinutes: 0 });
     prisma.booking.updateMany.mockResolvedValue({ count: 0 });
     await expect(service.cancel(token, grant, 1)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it("reschedules publicly after grant, collision and block checks", async () => {
     authorize();
-    prisma.booking.findFirst.mockResolvedValueOnce({ id: "b", status: "PENDING", locationId: "l", serviceDurationMinutes: 30, serviceBufferBeforeMinutes: 0, serviceBufferAfterMinutes: 0, startAt: new Date("2029-01-01T10:00:00Z") }).mockResolvedValueOnce(null);
+    prisma.booking.findFirst.mockResolvedValueOnce({ id: "b", status: "PENDING", locationId: "l", serviceDurationMinutes: 30, serviceBufferBeforeMinutes: 0, serviceBufferAfterMinutes: 0, serviceMinimumLeadMinutes: 60, serviceMaximumAdvanceDays: 365, rescheduleNoticeMinutes: 0, slotIntervalMinutes: 15, startAt: new Date("2029-01-01T10:00:00Z") }).mockResolvedValueOnce(null);
     prisma.availabilityBlock.findFirst.mockResolvedValue(null);
     prisma.booking.updateMany.mockResolvedValue({ count: 1 });
     prisma.booking.findFirstOrThrow.mockResolvedValue({ id: "b", version: 2 });
-    await expect(service.reschedule(token, grant, 1, "2030-01-01T10:00:00Z", "later")).resolves.toMatchObject({ version: 2 });
+    await expect(service.reschedule(token, grant, 1, "2029-12-25T10:00:00Z", "later")).resolves.toMatchObject({ version: 2 });
     expect(prisma.auditEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ actorUserId: null, action: "booking.public_rescheduled" }) });
   });
 

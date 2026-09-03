@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { ConflictException, GoneException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { ConflictException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { z } from "zod";
 import { openSecret, sealSecret } from "../../common/secret-box.js";
 import { ENVIRONMENT, type Environment } from "../../config/environment.js";
@@ -55,11 +55,12 @@ export class PublicService {
   async availability(slug: string, input: AvailabilityInput) {
     const tenant = await this.activeTenant(slug);
     return this.prisma.withTenant(tenant.id, async (tx) => {
+      const now = new Date();
       const [service, location, bookings, holds, blocks] = await Promise.all([
         tx.service.findFirst({ where: { id: input.serviceId, tenantId: tenant.id, isActive: true } }),
         tx.location.findFirst({ where: { id: input.locationId, tenantId: tenant.id, isActive: true }, include: { businessHours: true } }),
         tx.booking.findMany({ where: { tenantId: tenant.id, locationId: input.locationId, status: { in: ["HELD", "PENDING", "CONFIRMED"] }, occupiedStartAt: { lt: input.to }, occupiedEndAt: { gt: input.from } }, select: { occupiedStartAt: true, occupiedEndAt: true } }),
-        tx.slotHold.findMany({ where: { tenantId: tenant.id, locationId: input.locationId, status: "ACTIVE", expiresAt: { gt: new Date() }, occupiedStartAt: { lt: input.to }, occupiedEndAt: { gt: input.from } }, select: { occupiedStartAt: true, occupiedEndAt: true } }),
+        tx.slotHold.findMany({ where: { tenantId: tenant.id, locationId: input.locationId, status: "ACTIVE", expiresAt: { gt: now }, occupiedStartAt: { lt: input.to }, occupiedEndAt: { gt: input.from } }, select: { occupiedStartAt: true, occupiedEndAt: true } }),
         tx.availabilityBlock.findMany({ where: { tenantId: tenant.id, locationId: input.locationId, startsAt: { lt: input.to }, endsAt: { gt: input.from } }, select: { startsAt: true, endsAt: true } })
       ]);
       if (!service || !location) throw new NotFoundException("Service or location was not found");
@@ -68,18 +69,9 @@ export class PublicService {
         ...holds.map((item) => ({ start: item.occupiedStartAt, end: item.occupiedEndAt })),
         ...blocks.map((item) => ({ start: item.startsAt, end: item.endsAt }))
       ];
-      const slots: Date[] = [];
-      for (let cursor = new Date(input.from); cursor < input.to; cursor = new Date(cursor.getTime() + 15 * 60_000)) {
-        const window = this.scheduling.window(service, cursor);
-        if (window.endAt > input.to || occupied.some((item) => window.occupiedStartAt < item.end && window.occupiedEndAt > item.start)) continue;
-        try {
-          this.scheduling.assertBusinessHours(location, tenant.timezone, window);
-          slots.push(new Date(cursor));
-        } catch (error) {
-          if (!(error instanceof ConflictException)) throw error;
-        }
-      }
-      return { timezone: location.timezone ?? tenant.timezone, slots };
+      const timezone = location.timezone ?? tenant.timezone;
+      const slots = this.scheduling.availableSlots({ service, location, tenantTimezone: tenant.timezone, from: input.from, to: input.to, occupied, now });
+      return { timezone, slots };
     });
   }
 
@@ -94,13 +86,19 @@ export class PublicService {
         tx.location.findFirst({ where: { id: input.locationId, tenantId: tenant.id, isActive: true }, include: { businessHours: true } })
       ]);
       if (!service || !location) throw new NotFoundException("Service or location was not found");
-      if (input.startAt <= new Date()) throw new UnprocessableEntityException("Booking start must be in the future");
+      const now = new Date();
       const window = this.scheduling.window(service, input.startAt);
+      this.scheduling.assertPolicy(service, window.startAt, location.timezone ?? tenant.timezone, now);
       await this.scheduling.lockLocation(tx, tenant.id, location.id);
-      await this.scheduling.assertAvailable(tx, { tenantId: tenant.id, tenantTimezone: tenant.timezone, location, window });
+      await this.scheduling.assertAvailable(tx, { tenantId: tenant.id, tenantTimezone: tenant.timezone, location, window, now });
       const holdToken = randomBytes(32).toString("base64url");
       const expiresAt = new Date(Date.now() + HOLD_TTL_MS);
-      await tx.slotHold.create({ data: { tenantId: tenant.id, serviceId: service.id, locationId: location.id, tokenHash: digest(holdToken), ...window, expiresAt } });
+      await tx.slotHold.create({ data: {
+        tenantId: tenant.id, serviceId: service.id, locationId: location.id, tokenHash: digest(holdToken), ...window,
+        serviceMinimumLeadMinutes: service.minimumLeadMinutes, serviceMaximumAdvanceDays: service.maximumAdvanceDays,
+        cancellationNoticeMinutes: service.cancellationNoticeMinutes, rescheduleNoticeMinutes: service.rescheduleNoticeMinutes,
+        slotIntervalMinutes: service.slotIntervalMinutes, expiresAt
+      } });
       const response = { holdToken, expiresAt: expiresAt.toISOString() };
       await this.completeIdempotency(tx, scope, idempotencyKey, response);
       return response;
@@ -141,7 +139,10 @@ export class PublicService {
       const booking = await tx.booking.create({ data: {
         tenantId: tenant.id, customerId: customer.id, serviceId: service.id, locationId: location.id, status: "PENDING", ...window,
         serviceName: service.name, serviceDurationMinutes: service.durationMinutes, serviceBufferBeforeMinutes: service.bufferBeforeMinutes,
-        serviceBufferAfterMinutes: service.bufferAfterMinutes, servicePrice: service.price, currency: service.currency, customerNotes: input.customerNotes ?? null
+        serviceBufferAfterMinutes: service.bufferAfterMinutes, serviceMinimumLeadMinutes: hold.serviceMinimumLeadMinutes,
+        serviceMaximumAdvanceDays: hold.serviceMaximumAdvanceDays, cancellationNoticeMinutes: hold.cancellationNoticeMinutes,
+        rescheduleNoticeMinutes: hold.rescheduleNoticeMinutes, slotIntervalMinutes: hold.slotIntervalMinutes,
+        servicePrice: service.price, currency: service.currency, customerNotes: input.customerNotes ?? null
       } });
       const consumed = await tx.slotHold.updateMany({ where: { id: hold.id, status: "ACTIVE", expiresAt: { gt: new Date() } }, data: { status: "CONSUMED" } });
       if (consumed.count !== 1) throw new GoneException("The slot hold expired or is invalid");

@@ -25,7 +25,7 @@ import type { Service, ServiceCategory } from "@/types/service";
 type Category = ServiceCategory;
 type ServiceRow = Service;
 
-const emptyForm = { name: "", description: "", durationMinutes: 30, price: 0, showPrice: true, categoryId: "" };
+const emptyForm = { name: "", description: "", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, minimumLeadMinutes: 60, maximumAdvanceDays: 365, cancellationNoticeMinutes: 0, rescheduleNoticeMinutes: 0, slotIntervalMinutes: 15 as Service["slotIntervalMinutes"], price: 0, showPrice: true, categoryId: "" };
 type ServiceForm = typeof emptyForm;
 
 export function ServicesManager() {
@@ -59,6 +59,13 @@ export function ServicesManager() {
         name: form.name,
         description: form.description || null,
         durationMinutes: form.durationMinutes,
+        bufferBeforeMinutes: form.bufferBeforeMinutes,
+        bufferAfterMinutes: form.bufferAfterMinutes,
+        minimumLeadMinutes: form.minimumLeadMinutes,
+        maximumAdvanceDays: form.maximumAdvanceDays,
+        cancellationNoticeMinutes: form.cancellationNoticeMinutes,
+        rescheduleNoticeMinutes: form.rescheduleNoticeMinutes,
+        slotIntervalMinutes: form.slotIntervalMinutes,
         price: form.showPrice ? form.price : null,
         showPrice: form.showPrice,
         currency: "CRC"
@@ -94,6 +101,13 @@ export function ServicesManager() {
       name: service.name,
       description: service.description ?? "",
       durationMinutes: service.durationMinutes,
+      bufferBeforeMinutes: service.bufferBeforeMinutes,
+      bufferAfterMinutes: service.bufferAfterMinutes,
+      minimumLeadMinutes: service.minimumLeadMinutes,
+      maximumAdvanceDays: service.maximumAdvanceDays,
+      cancellationNoticeMinutes: service.cancellationNoticeMinutes,
+      rescheduleNoticeMinutes: service.rescheduleNoticeMinutes,
+      slotIntervalMinutes: service.slotIntervalMinutes,
       price: Number(service.price ?? 0),
       showPrice: service.showPrice,
       categoryId: service.categoryId
@@ -212,6 +226,18 @@ export function ServicesManager() {
             <div className="space-y-2">
               <Label htmlFor="svc-price">Precio informativo</Label>
               <Input id="svc-price" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+            </div>
+          </div>
+          <div className="rounded-lg border p-4">
+            <p className="mb-3 text-sm font-medium">Politicas de agenda</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2"><Label htmlFor="svc-before">Preparacion previa (min)</Label><Input id="svc-before" type="number" min={0} max={1440} value={form.bufferBeforeMinutes} onChange={(e) => setForm({ ...form, bufferBeforeMinutes: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label htmlFor="svc-after">Cierre posterior (min)</Label><Input id="svc-after" type="number" min={0} max={1440} value={form.bufferAfterMinutes} onChange={(e) => setForm({ ...form, bufferAfterMinutes: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label htmlFor="svc-lead">Anticipacion minima (min)</Label><Input id="svc-lead" type="number" min={0} max={43200} value={form.minimumLeadMinutes} onChange={(e) => setForm({ ...form, minimumLeadMinutes: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label htmlFor="svc-horizon">Reserva maxima (dias)</Label><Input id="svc-horizon" type="number" min={1} max={730} value={form.maximumAdvanceDays} onChange={(e) => setForm({ ...form, maximumAdvanceDays: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label htmlFor="svc-cancel">Aviso para cancelar (min)</Label><Input id="svc-cancel" type="number" min={0} max={43200} value={form.cancellationNoticeMinutes} onChange={(e) => setForm({ ...form, cancellationNoticeMinutes: Number(e.target.value) })} /></div>
+              <div className="space-y-2"><Label htmlFor="svc-reschedule">Aviso para reagendar (min)</Label><Input id="svc-reschedule" type="number" min={0} max={43200} value={form.rescheduleNoticeMinutes} onChange={(e) => setForm({ ...form, rescheduleNoticeMinutes: Number(e.target.value) })} /></div>
+              <div className="col-span-2 space-y-2"><Label htmlFor="svc-interval">Intervalo entre inicios</Label><select id="svc-interval" className={selectClass} value={form.slotIntervalMinutes} onChange={(e) => setForm({ ...form, slotIntervalMinutes: Number(e.target.value) as Service["slotIntervalMinutes"] })}>{[5, 10, 15, 20, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></div>
             </div>
           </div>
           <div className="space-y-2">

@@ -12,14 +12,17 @@ describe("catalog schemas", () => {
     expect(() => createCategorySchema.parse({ name: "x", unexpected: true })).toThrow();
   });
   it("validates production service constraints", () => {
-    const result = createServiceSchema.parse({ categoryId: "f9dd70d0-0f7b-497c-9d02-302859f65f1e", name: "Consulta", durationMinutes: 30, currency: "crc", price: 12500 });
+    const result = createServiceSchema.parse({ categoryId: "f9dd70d0-0f7b-497c-9d02-302859f65f1e", name: "Consulta", durationMinutes: 30, currency: "crc", price: 12500, minimumLeadMinutes: 120, maximumAdvanceDays: 90, slotIntervalMinutes: 15 });
     expect(result.currency).toBe("CRC");
     expect(() => createServiceSchema.parse({ ...result, durationMinutes: 0 })).toThrow();
     expect(() => createServiceSchema.parse({ ...result, currency: "COLON" })).toThrow();
+    expect(() => createServiceSchema.parse({ ...result, slotIntervalMinutes: 17 })).toThrow();
   });
   it("validates locations", () => {
     expect(createLocationSchema.parse({ name: " Central ", isMain: true }).name).toBe("Central");
+    expect(createLocationSchema.parse({ name: "Central", timezone: "America/Costa_Rica" }).timezone).toBe("America/Costa_Rica");
     expect(() => createLocationSchema.parse({ name: "" })).toThrow();
+    expect(() => createLocationSchema.parse({ name: "Central", timezone: "Costa Rica" })).toThrow();
   });
   it("requires coherent opening windows", () => {
     expect(businessHourSchema.parse({ dayOfWeek: 1, openTime: "08:00", closeTime: "17:00" }).isClosed).toBe(false);

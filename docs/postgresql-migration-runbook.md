@@ -16,10 +16,12 @@ performance, rollback, and restore evidence has passed in staging.
   identifiers applied only at domain and presentation boundaries.
 - Money uses fixed-precision decimal values plus an ISO 4217 currency code.
 - IDs and externally visible booking references remain stable through cutover.
-- Existing bookings retain their historical occupied range and zero buffer
-  snapshot because the former system did not persist immutable buffer values.
-  New bookings snapshot buffers and protect the full occupied range. Never
-  infer historical buffers from mutable service configuration during cutover.
+- Existing bookings retain their historical occupied range. If the source does
+  not contain buffers or booking-policy terms, the approved migration defaults
+  must be recorded in the reconciliation report. New bookings snapshot buffers,
+  lead time, booking horizon, cancellation/rescheduling notice, and slot
+  interval. Never recompute a booking's accepted terms from mutable service
+  configuration after cutover.
 
 ## Delivery phases
 
@@ -49,6 +51,8 @@ fields. Additionally verify:
 - no overlapping active reservations;
 - no overlapping active slot holds or hold/booking ranges after expiry cleanup;
 - booking status and monetary totals match;
+- every booking status transition is legal and every policy snapshot satisfies
+  its database constraint;
 - normalized emails and public references remain unique;
 - all tenant-owned rows are inaccessible from a different tenant context;
 - the designated superadmin is the only bootstrap-created runtime identity;

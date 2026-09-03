@@ -115,6 +115,15 @@ rate limiting; a value that is too low groups traffic under the proxy address.
 - Availability includes service buffers, active bookings, availability blocks,
   and unexpired slot holds. The customer must choose an explicit active
   location before availability is calculated.
+- Each service defines a validated minimum lead time, maximum booking horizon,
+  cancellation notice, rescheduling notice, and local-clock slot interval.
+  A booking snapshots those values so later catalog edits cannot rewrite the
+  customer's accepted policy. PostgreSQL check constraints independently bound
+  every persisted policy value.
+- Slot generation aligns to the location's IANA timezone instead of the request
+  timestamp. UTC remains the stored source of truth. Spring-forward gaps never
+  create imaginary instants; fall-back duplicates remain distinct and the UI
+  renders their UTC offset so customers can tell them apart.
 - Continuing from a slot acquires a ten-minute hold. PostgreSQL serializes all
   writes for the same tenant and location with a transaction-scoped advisory
   lock, while exclusion constraints reject overlapping active holds and
@@ -148,6 +157,10 @@ rate limiting; a value that is too low groups traffic under the proxy address.
 - Expired holds are marked before every serialized scheduling command. Tenant-
   scoped maintenance removes expired holds, confirmations, access challenges,
   and idempotency records without bypassing RLS.
+- Application and PostgreSQL state machines both reject illegal booking status
+  jumps. Completion is unavailable before the scheduled end and no-show is
+  unavailable before the scheduled start; optimistic versions still protect
+  valid concurrent transitions.
 
 ## Key management
 

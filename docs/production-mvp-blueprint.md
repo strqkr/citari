@@ -3,7 +3,7 @@
 Status: active execution — not approved for production
 Owner: `strqkr`
 Target: production-ready multi-tenant booking platform  
-Last evidence audit: 2026-09-02
+Last evidence audit: 2026-09-03
 
 ## Execution governance
 
@@ -27,21 +27,20 @@ behavior depends on managed infrastructure. The final go-live review audits all
 | Runtime architecture | pnpm workspace, NestJS/Fastify API, Next.js BFF, strict configuration, RFC 7807 errors | Contract artifact/versioning and full domain dependency enforcement |
 | Production initialization | No seed path; audited idempotent Andrew bootstrap; forced password change, verification and MFA | Managed-secret/bootstrap ceremony in staging and automatic credential removal evidence |
 | Identity security | HttpOnly BFF cookies, exact-origin mutation enforcement, rotated hashed refresh tokens, family reuse revocation, verification/reset delivery, throttling | Session inventory and broader privileged step-up coverage |
-| Booking integrity | Server availability, immutable buffers, location locks, database exclusions, expiring holds, encrypted idempotent replay, emailed tracking verification | DST/property testing and full policy model |
-| Public UX | Explicit location, real availability, hold recovery, nonce confirmation, safe-body verified tracking, differentiated failures | Accessible end-to-end audit and calendar invitations |
+| Booking integrity | Server availability, immutable buffers and policy snapshots, database transition guard, lead/horizon/notice enforcement, local slot intervals, location locks, exclusions, expiring holds, encrypted idempotent replay, emailed tracking verification | Property-based scheduling tests and resource-capacity policy |
+| Public UX | Explicit location, real timezone-correct availability, DST overlap labels, hold recovery, nonce confirmation, safe-body verified tracking, differentiated failures | Accessible end-to-end audit and calendar invitations |
 | Automated gate | `pnpm quality`, enforced unit coverage, clean PostgreSQL bootstrap/HTTP integration, concurrent booking test, two production image builds | Playwright/axe/visual gates and security/supply-chain scans |
 | Git provenance | Reachable history and GitHub contributors limited to `strqkr` and `lunqdd`; no coauthor trailers | Branch protection, signed release and provenance enforcement |
 
 ### Next P0 execution order
 
-1. Booking state-machine, timezone/DST and availability-policy completion.
-2. OpenAPI contract artifact plus compatibility and Playwright golden paths.
-3. Accessibility remediation and automated axe gate for critical journeys.
-4. Supply-chain hardening: immutable actions/images, CodeQL, dependency and
+1. OpenAPI contract artifact plus compatibility and Playwright golden paths.
+2. Accessibility remediation and automated axe gate for critical journeys.
+3. Supply-chain hardening: immutable actions/images, CodeQL, dependency and
    container scanning, SBOM, signed provenance, and protected publishing.
-5. Infrastructure, staging promotion, backups/PITR, restore evidence,
+4. Infrastructure, staging promotion, backups/PITR, restore evidence,
    OpenTelemetry, SLOs, alerts, and incident runbooks.
-6. Privacy workflows, retention policy, final threat model, and the item-by-item
+5. Privacy workflows, retention policy, final threat model, and the item-by-item
    go-live review.
 
 ## Product decision
