@@ -69,11 +69,10 @@ export const endpoints = {
     bookings: (slug: string) => `/public/${slug}/bookings`
   },
   track: {
+    requestVerification: "/public/tracking/verification/request",
+    confirmVerification: "/public/tracking/verification/confirm",
     lookup: "/public/tracking/lookup",
     cancelSafe: "/public/tracking/cancel",
-    rescheduleSafe: "/public/tracking/reschedule",
-    get: (code: string) => `/public/tracking/${code}`,
-    cancel: (code: string) => `/public/tracking/${code}/cancel`,
-    reschedule: (code: string) => `/public/tracking/${code}/reschedule`
+    rescheduleSafe: "/public/tracking/reschedule"
   }
 } as const;

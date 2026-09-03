@@ -54,7 +54,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   if (!FORWARDED_METHODS.has(request.method)) return NextResponse.json({ title: "Method not allowed", status: 405 }, { status: 405 });
   if (request.method !== "GET") {
     const origin = request.headers.get("origin");
-    if (origin && new URL(origin).host !== request.nextUrl.host) return NextResponse.json({ title: "Origen no permitido", status: 403 }, { status: 403 });
+    if (origin !== request.nextUrl.origin) return NextResponse.json({ title: "Origen no permitido", status: 403 }, { status: 403 });
   }
 
   const { path } = await context.params;

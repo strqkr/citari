@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { BookingShell } from "@/components/layout/BookingShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +18,15 @@ type TrackedBooking = {
   location: { name: string };
   tenant: { name: string; timezone: string; locale: string };
 };
+type VerificationChallenge = { challengeToken: string; expiresAt: string; destination: string };
+type VerificationGrant = { accessGrant: string; expiresAt: string };
 type Action = "cancel" | "reschedule" | null;
 
 function errorMessage(caught: unknown): string {
   if (!(caught instanceof ApiError)) return "No se pudo contactar el servicio. Intenta nuevamente.";
-  if (caught.status === 404 || caught.status === 410) return "El acceso no existe, venció o fue revocado.";
+  if (caught.status === 401) return "El código es incorrecto o el acceso verificado venció.";
+  if (caught.status === 404) return "El acceso no existe, venció o fue revocado.";
+  if (caught.status === 410) return "El código venció o agotó sus intentos. Solicita uno nuevo.";
   if (caught.status === 409) return "La reserva cambió mientras la consultabas. Actualízala e intenta de nuevo.";
   if (caught.status === 422) return caught.detail || "La operación ya no está permitida para esta reserva.";
   if (caught.status === 429) return "Hay demasiados intentos. Espera unos minutos antes de continuar.";
@@ -32,6 +36,9 @@ function errorMessage(caught: unknown): string {
 
 export default function TrackLookupPage() {
   const [token, setToken] = useState("");
+  const [challenge, setChallenge] = useState<VerificationChallenge | null>(null);
+  const [code, setCode] = useState("");
+  const [grant, setGrant] = useState<VerificationGrant | null>(null);
   const [booking, setBooking] = useState<TrackedBooking | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,55 +46,84 @@ export default function TrackLookupPage() {
   const [reason, setReason] = useState("");
   const [startAt, setStartAt] = useState("");
 
-  const lookup = useCallback(async (value: string) => {
+  useEffect(() => {
+    const fragmentToken = new URLSearchParams(window.location.hash.slice(1)).get("token");
+    history.replaceState(null, "", window.location.pathname);
+    if (fragmentToken) setToken(fragmentToken);
+  }, []);
+
+  async function requestVerification(value: string) {
     const normalized = value.trim();
     if (!normalized) return;
     setLoading(true);
     setError(null);
-    setAction(null);
+    setBooking(null);
+    setGrant(null);
     try {
-      setBooking(await apiPost<TrackedBooking>(endpoints.track.lookup, { token: normalized }));
+      setChallenge(await apiPost<VerificationChallenge>(endpoints.track.requestVerification, { token: normalized }));
       setToken(normalized);
+      setCode("");
+    } catch (caught) {
+      setChallenge(null);
+      setError(errorMessage(caught));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function lookup(access: VerificationGrant) {
+    const result = await apiPost<TrackedBooking>(endpoints.track.lookup, { token, accessGrant: access.accessGrant });
+    setGrant(access);
+    setBooking(result);
+    setChallenge(null);
+    setAction(null);
+  }
+
+  async function submitToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await requestVerification(token);
+  }
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!challenge) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const access = await apiPost<VerificationGrant>(endpoints.track.confirmVerification, { token, challengeToken: challenge.challengeToken, code });
+      await lookup(access);
     } catch (caught) {
       setBooking(null);
       setError(errorMessage(caught));
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    const fragmentToken = new URLSearchParams(window.location.hash.slice(1)).get("token");
-    history.replaceState(null, "", window.location.pathname);
-    if (fragmentToken) {
-      setToken(fragmentToken);
-      void lookup(fragmentToken);
-    }
-  }, [lookup]);
-
-  async function submitLookup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await lookup(token);
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!booking || !action) return;
+    if (!booking || !action || !grant) return;
     setLoading(true);
     setError(null);
     try {
       const path = action === "cancel" ? endpoints.track.cancelSafe : endpoints.track.rescheduleSafe;
       await apiPost(path, {
         token,
+        accessGrant: grant.accessGrant,
         version: booking.version,
         ...(action === "reschedule" ? { startAt: new Date(startAt).toISOString() } : {}),
         ...(reason.trim() ? { reason: reason.trim() } : {})
       });
       setReason("");
       setStartAt("");
-      await lookup(token);
+      await lookup(grant);
     } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        setBooking(null);
+        setGrant(null);
+      }
       setError(errorMessage(caught));
+    } finally {
       setLoading(false);
     }
   }
@@ -97,16 +133,26 @@ export default function TrackLookupPage() {
     <div className="mx-auto w-full max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-soft sm:p-8">
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">Seguimiento privado</p>
       <h1 className="mt-3 font-serif text-4xl font-medium tracking-tight">Consulta tu cita</h1>
-      <p className="mt-3 text-muted-foreground">El acceso se envía dentro del cuerpo cifrado de la solicitud y se elimina de la barra del navegador.</p>
-      <form onSubmit={submitLookup} className="mt-7 space-y-3">
+      <p className="mt-3 text-muted-foreground">Tu acceso nunca aparece en la URL. Antes de mostrar o cambiar la reserva enviaremos un código de seis dígitos a tu correo.</p>
+
+      {!booking ? <form onSubmit={submitToken} className="mt-7 space-y-3">
         <Label htmlFor="tracking-token">Acceso de seguimiento</Label>
-        <Input id="tracking-token" type="password" value={token} onChange={(event) => { setToken(event.target.value); setBooking(null); }} autoComplete="off" required aria-describedby="tracking-help" />
-        <p id="tracking-help" className="text-xs text-muted-foreground">Pega el acceso exactamente como lo recibiste; distingue mayúsculas y minúsculas.</p>
-        <Button type="submit" className="w-full" disabled={loading}>{loading ? "Consultando..." : "Consultar reserva"}</Button>
-      </form>
+        <Input id="tracking-token" type="password" value={token} onChange={(event) => { setToken(event.target.value); setChallenge(null); setGrant(null); }} autoComplete="off" required aria-describedby="tracking-help" />
+        <p id="tracking-help" className="text-xs text-muted-foreground">Pégalo exactamente como lo recibiste; distingue mayúsculas y minúsculas.</p>
+        <Button type="submit" className="w-full" disabled={loading}>{loading ? "Enviando..." : challenge ? "Enviar código nuevo" : "Enviar código de verificación"}</Button>
+      </form> : null}
+
+      {challenge && !booking ? <form onSubmit={submitCode} className="mt-5 space-y-3 rounded-xl border border-border p-4">
+        <p className="text-sm text-muted-foreground" aria-live="polite">Enviamos el código a <strong className="text-foreground">{challenge.destination}</strong>. Vence a las {new Date(challenge.expiresAt).toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}.</p>
+        <Label htmlFor="verification-code">Código de seis dígitos</Label>
+        <Input id="verification-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required />
+        <Button type="submit" className="w-full" disabled={loading || code.length !== 6}>{loading ? "Verificando..." : "Verificar y consultar"}</Button>
+      </form> : null}
+
       {error ? <p role="alert" className="mt-4 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
       {booking ? <div className="mt-7" aria-live="polite">
         <div className="flex items-center justify-between gap-3"><h2 className="font-serif text-2xl">Detalle de tu cita</h2><span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{booking.status}</span></div>
+        <p className="mt-2 text-xs text-muted-foreground">Acceso verificado hasta {grant ? new Date(grant.expiresAt).toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" }) : "—"}.</p>
         <dl className="mt-4 divide-y divide-border">
           {[
             ["Negocio", booking.tenant.name],

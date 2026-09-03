@@ -15,6 +15,8 @@ const entitySchema = z.object({ id: z.uuid() });
 const holdSchema = z.object({ holdToken: z.string(), expiresAt: z.string() });
 const bookingResultSchema = z.object({ confirmationNonce: z.string(), expiresAt: z.string() });
 const confirmationResultSchema = z.object({ trackingToken: z.string(), booking: z.object({ id: z.uuid(), status: z.string() }) });
+const trackingChallengeSchema = z.object({ challengeToken: z.string(), expiresAt: z.string(), destination: z.string() });
+const trackingGrantSchema = z.object({ accessGrant: z.string(), expiresAt: z.string() });
 const problemSchema = z.object({ status: z.number() });
 const readySchema = z.object({ status: z.literal("ready") });
 const challengeSchema = z.object({ challengeToken: z.string(), status: z.string() });
@@ -147,7 +149,17 @@ async function main(): Promise<void> {
     const confirmationReplay = confirmationResultSchema.parse(status(await http.post(`/api/v1/public/${first.slug}/booking-confirmation`).set("Idempotency-Key", confirmationKey).send({ confirmationNonce: firstBookingResult.confirmationNonce }), 200).body);
     assert.equal(confirmationReplay.trackingToken, confirmation.trackingToken);
     status(await http.post(`/api/v1/public/${first.slug}/booking-confirmation`).set("Idempotency-Key", randomUUID()).send({ confirmationNonce: firstBookingResult.confirmationNonce }), 410);
-    status(await http.post("/api/v1/public/tracking/lookup").send({ token: confirmation.trackingToken }), 200);
+    status(await http.post("/api/v1/public/tracking/lookup").send({ token: confirmation.trackingToken }), 400);
+    const trackingChallenge = trackingChallengeSchema.parse(status(await http.post("/api/v1/public/tracking/verification/request").send({ token: confirmation.trackingToken }), 202).body);
+    const accessDelivery = await prisma.emailDelivery.findFirst({ where: { template: "BOOKING_ACCESS_CODE", sentAt: null }, orderBy: { createdAt: "desc" } });
+    assert.ok(accessDelivery);
+    const accessPayload = JSON.parse(openSecret(accessDelivery.payloadEncrypted, notificationKey, "citari:email-delivery:v1")) as { code: string };
+    const incorrectAccessCode = accessPayload.code === "999999" ? "000000" : "999999";
+    status(await http.post("/api/v1/public/tracking/verification/confirm").send({ token: confirmation.trackingToken, challengeToken: trackingChallenge.challengeToken, code: incorrectAccessCode }), 401);
+    const trackingGrant = trackingGrantSchema.parse(status(await http.post("/api/v1/public/tracking/verification/confirm").send({ token: confirmation.trackingToken, challengeToken: trackingChallenge.challengeToken, code: accessPayload.code }), 200).body);
+    const replayedGrant = trackingGrantSchema.parse(status(await http.post("/api/v1/public/tracking/verification/confirm").send({ token: confirmation.trackingToken, challengeToken: trackingChallenge.challengeToken, code: accessPayload.code }), 200).body);
+    assert.equal(replayedGrant.accessGrant, trackingGrant.accessGrant);
+    status(await http.post("/api/v1/public/tracking/lookup").send({ token: confirmation.trackingToken, accessGrant: trackingGrant.accessGrant }), 200);
     const bookingCount = await prisma.withTenant(firstRegistration.tenantId, (tx) => tx.booking.count({ where: { tenantId: firstRegistration.tenantId, startAt: slotStart } }));
     assert.equal(bookingCount, 1);
     status(await http

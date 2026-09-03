@@ -12,8 +12,9 @@ enrollment, TOTP replay denial, owner authentication, password reset and session
 revocation, reset replay denial, login throttling with `Retry-After`,
 authenticated profile access, a real catalog write, cross-tenant mutation
 denial, two simultaneous holds for one slot, idempotent concurrent booking
-replay, one-use confirmation, safe-body tracking lookup, refresh-token rotation,
-reuse detection, and family revocation. It uses
+replay, one-use confirmation, mandatory emailed tracking verification,
+invalid-code denial, replay-safe short-lived grant issuance, safe-body tracking
+lookup, refresh-token rotation, reuse detection, and family revocation. It uses
 unique records in the disposable CI database and does not depend on fixtures or
 seed data.
 

@@ -4,7 +4,7 @@ import { openSecret, sealSecret } from "../common/secret-box.js";
 import { ENVIRONMENT, type Environment } from "../config/environment.js";
 import { PrismaService, type TransactionClient } from "../database/prisma.service.js";
 
-type Template = "EMAIL_VERIFICATION" | "PASSWORD_RESET";
+type Template = "EMAIL_VERIFICATION" | "PASSWORD_RESET" | "BOOKING_ACCESS_CODE";
 interface ClaimedDelivery { id: string; recipient: string; template: Template; payloadEncrypted: string; attempts: number }
 const PAYLOAD_CONTEXT = "citari:email-delivery:v1";
 const MAX_ATTEMPTS = 10;
@@ -39,16 +39,25 @@ export class NotificationOutboxService implements OnApplicationBootstrap, OnModu
   }
 
   async enqueue(tx: TransactionClient, userId: string, recipient: string, template: Template, token: string): Promise<void> {
+    await this.enqueuePayload(tx, userId, `user:${userId}:${template}`, recipient, template, { token });
+  }
+
+  async enqueueBookingAccess(tx: TransactionClient, tenantId: string, bookingId: string, recipient: string, code: string): Promise<void> {
+    await this.enqueuePayload(tx, null, `booking:${tenantId}:${bookingId}:BOOKING_ACCESS_CODE`, recipient, "BOOKING_ACCESS_CODE", { code });
+  }
+
+  private async enqueuePayload(tx: TransactionClient, userId: string | null, deduplicationKey: string, recipient: string, template: Template, payload: Record<string, string>): Promise<void> {
     const now = new Date();
     await tx.emailDelivery.updateMany({
-      where: { userId, template, sentAt: null },
+      where: { deduplicationKey, sentAt: null },
       data: { sentAt: now, lockedAt: null, lastError: "Superseded by a newer security message" }
     });
     await tx.emailDelivery.create({ data: {
       userId,
+      deduplicationKey,
       recipient: recipient.trim().toLowerCase(),
       template,
-      payloadEncrypted: sealSecret(JSON.stringify({ token }), this.env.NOTIFICATION_ENCRYPTION_KEY, PAYLOAD_CONTEXT)
+      payloadEncrypted: sealSecret(JSON.stringify(payload), this.env.NOTIFICATION_ENCRYPTION_KEY, PAYLOAD_CONTEXT)
     } });
   }
 
@@ -86,9 +95,8 @@ export class NotificationOutboxService implements OnApplicationBootstrap, OnModu
     const transporter = this.transporter;
     if (!transporter) return;
     try {
-      const payload = JSON.parse(openSecret(delivery.payloadEncrypted, this.env.NOTIFICATION_ENCRYPTION_KEY, PAYLOAD_CONTEXT)) as { token?: unknown };
-      if (typeof payload.token !== "string") throw new Error("Invalid delivery payload");
-      const message = this.render(delivery.template, payload.token);
+      const payload = JSON.parse(openSecret(delivery.payloadEncrypted, this.env.NOTIFICATION_ENCRYPTION_KEY, PAYLOAD_CONTEXT)) as { token?: unknown; code?: unknown };
+      const message = this.render(delivery.template, payload);
       await transporter.sendMail({ from: this.env.MAIL_FROM, to: delivery.recipient, subject: message.subject, text: message.text, html: message.html });
       await this.prisma.emailDelivery.update({ where: { id: delivery.id }, data: { sentAt: new Date(), lockedAt: null, lastError: null } });
     } catch {
@@ -101,10 +109,19 @@ export class NotificationOutboxService implements OnApplicationBootstrap, OnModu
     }
   }
 
-  private render(template: Template, token: string) {
+  private render(template: Template, payload: { token?: unknown; code?: unknown }) {
+    if (template === "BOOKING_ACCESS_CODE") {
+      if (typeof payload.code !== "string" || !/^\d{6}$/.test(payload.code)) throw new Error("Invalid delivery payload");
+      return {
+        subject: "Código para consultar tu reserva en Citari",
+        text: `Tu código de verificación es ${payload.code}. Vence en 10 minutos.\n\nSi no solicitaste acceso a una reserva, ignora este mensaje.`,
+        html: `<p>Tu código para consultar la reserva es:</p><p style="font-size:24px;font-weight:700;letter-spacing:0.2em">${payload.code}</p><p>Vence en 10 minutos. Si no solicitaste este acceso, ignora el mensaje.</p>`
+      };
+    }
+    if (typeof payload.token !== "string") throw new Error("Invalid delivery payload");
     const path = template === "EMAIL_VERIFICATION" ? "/verify-email" : "/reset-password";
     const url = new URL(path, this.env.APP_PUBLIC_URL);
-    url.hash = new URLSearchParams({ token }).toString();
+    url.hash = new URLSearchParams({ token: payload.token }).toString();
     if (template === "EMAIL_VERIFICATION") {
       return {
         subject: "Verifica tu correo en Citari",

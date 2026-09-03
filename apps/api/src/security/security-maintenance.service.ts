@@ -34,6 +34,7 @@ export class SecurityMaintenanceService implements OnApplicationBootstrap, OnMod
         await tx.slotHold.updateMany({ where: { status: "ACTIVE", expiresAt: { lte: now } }, data: { status: "EXPIRED" } });
         await tx.slotHold.deleteMany({ where: { status: { in: ["CONSUMED", "RELEASED", "EXPIRED"] }, updatedAt: { lt: retentionCutoff } } });
         await tx.bookingConfirmation.deleteMany({ where: { OR: [{ expiresAt: { lt: retentionCutoff } }, { consumedAt: { lt: retentionCutoff } }] } });
+        await tx.bookingAccessChallenge.deleteMany({ where: { OR: [{ expiresAt: { lt: retentionCutoff } }, { grantExpiresAt: { lt: retentionCutoff } }] } });
         await tx.idempotencyKey.deleteMany({ where: { expiresAt: { lt: now } } });
       });
     }

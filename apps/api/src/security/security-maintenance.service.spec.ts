@@ -6,6 +6,7 @@ describe("SecurityMaintenanceService", () => {
     const tx = {
       slotHold: { updateMany: vi.fn().mockReturnValue("expire-holds"), deleteMany: vi.fn().mockReturnValue("holds") },
       bookingConfirmation: { deleteMany: vi.fn().mockReturnValue("confirmations") },
+      bookingAccessChallenge: { deleteMany: vi.fn().mockReturnValue("access-challenges") },
       idempotencyKey: { deleteMany: vi.fn().mockReturnValue("idempotency") }
     };
     const prisma = {
@@ -21,6 +22,7 @@ describe("SecurityMaintenanceService", () => {
     expect(prisma.withTenant).toHaveBeenCalledWith("tenant", expect.any(Function));
     expect(tx.slotHold.updateMany).toHaveBeenCalled();
     expect(tx.bookingConfirmation.deleteMany).toHaveBeenCalled();
+    expect(tx.bookingAccessChallenge.deleteMany).toHaveBeenCalled();
     expect(tx.idempotencyKey.deleteMany).toHaveBeenCalled();
   });
 });

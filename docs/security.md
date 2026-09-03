@@ -9,6 +9,12 @@ forwards bearer credentials to the NestJS API. PostgreSQL remains the final
 tenant-isolation boundary through forced row-level security and database
 constraints.
 
+Every state-changing BFF request must carry an `Origin` exactly equal to the
+BFF origin, including scheme and port. Missing, cross-origin, and merely
+same-host origins are rejected before cookies or request bodies are forwarded.
+The API itself accepts bearer credentials, not browser cookies, and enforces a
+strict environment-specific CORS allowlist.
+
 `JWT_SECRET`, `MFA_ENCRYPTION_KEY`, `NOTIFICATION_ENCRYPTION_KEY`, SMTP and
 database credentials, bootstrap input, raw refresh tokens, raw authentication
 challenges, and TOTP secrets are secrets. They must be supplied by the
@@ -130,9 +136,18 @@ rate limiting; a value that is too low groups traffic under the proxy address.
 - The supported browser tracking flow sends the case-sensitive credential in a
   POST body. It is never placed in a query string, browser-visible path,
   referrer, or server-rendered link.
+- A tracking credential is insufficient by itself. The customer requests a
+  six-digit code delivered through the encrypted email outbox. PostgreSQL
+  serializes challenge requests and verification attempts; the code is stored
+  only as an HMAC digest, expires after ten minutes, and is disabled after five
+  failed attempts. Successful verification returns a random 15-minute access
+  grant whose plaintext is encrypted at rest. Lookup, cancellation, and
+  rescheduling require both the tracking credential and that grant.
+- Verification and mutation credentials exist only in POST bodies and browser
+  memory. The legacy token-in-path API and frontend routes are removed.
 - Expired holds are marked before every serialized scheduling command. Tenant-
-  scoped maintenance removes expired holds, confirmations, and idempotency
-  records without bypassing RLS.
+  scoped maintenance removes expired holds, confirmations, access challenges,
+  and idempotency records without bypassing RLS.
 
 ## Key management
 
@@ -163,5 +178,6 @@ session revocation, outbox claiming/retry, cleanup, and progressive throttling.
 The PostgreSQL HTTP test exercises bootstrap, password change, MFA enrollment,
 email verification, password reset, token replay rejection, session revocation,
 login throttling with `Retry-After`, tenant activation/isolation, concurrent
-slot holds, idempotent booking replay, one-use confirmation, tracking lookup,
+slot holds, idempotent booking replay, one-use confirmation, emailed tracking
+verification, invalid-code denial, grant replay, authorized tracking lookup,
 and refresh-family revocation against a newly migrated PostgreSQL 17 database.

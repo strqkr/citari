@@ -34,8 +34,9 @@ describe("NotificationOutboxService", () => {
   it("supersedes stale messages and encrypts the queued token", async () => {
     const tx = { emailDelivery: { updateMany: vi.fn(), create: vi.fn() } };
     await service.enqueue(tx as never, "user", " Owner@Example.com ", "EMAIL_VERIFICATION", "raw-token");
-    expect(tx.emailDelivery.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user", template: "EMAIL_VERIFICATION", sentAt: null } }));
+    expect(tx.emailDelivery.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { deduplicationKey: "user:user:EMAIL_VERIFICATION", sentAt: null } }));
     const data = tx.emailDelivery.create.mock.calls[0]?.[0]?.data;
+    expect(data.deduplicationKey).toBe("user:user:EMAIL_VERIFICATION");
     expect(data.recipient).toBe("owner@example.com");
     expect(data.payloadEncrypted).not.toContain("raw-token");
     expect(openSecret(data.payloadEncrypted, "n".repeat(32), "citari:email-delivery:v1")).toBe('{"token":"raw-token"}');
@@ -55,6 +56,20 @@ describe("NotificationOutboxService", () => {
     transporter.sendMail.mockRejectedValue(new Error("provider unavailable"));
     await expect(service.drainOnce()).resolves.toBe(1);
     expect(prisma.emailDelivery.update).toHaveBeenCalledWith({ where: { id: "delivery" }, data: expect.objectContaining({ lockedAt: null, lastError: "Delivery attempt failed", availableAt: expect.any(Date) }) });
+  });
+
+  it("queues and renders a customer booking access code without a user record", async () => {
+    const tx = { emailDelivery: { updateMany: vi.fn(), create: vi.fn() } };
+    await service.enqueueBookingAccess(tx as never, "tenant", "booking", "customer@example.com", "123456");
+    const queued = tx.emailDelivery.create.mock.calls[0]?.[0]?.data;
+    expect(queued.userId).toBeNull();
+    expect(queued.deduplicationKey).toBe("booking:tenant:booking:BOOKING_ACCESS_CODE");
+
+    transaction.$queryRaw.mockResolvedValue([{ id: "delivery", recipient: "customer@example.com", template: "BOOKING_ACCESS_CODE", payloadEncrypted: queued.payloadEncrypted, attempts: 1 }]);
+    await expect(service.drainOnce()).resolves.toBe(1);
+    const message = transporter.sendMail.mock.calls[0]?.[0];
+    expect(message.text).toContain("123456");
+    expect(message.text).toContain("10 minutos");
   });
 
   it("does not start delivery when transport is explicitly disabled", async () => {
