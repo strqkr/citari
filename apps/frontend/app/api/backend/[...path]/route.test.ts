@@ -69,4 +69,15 @@ describe("backend session proxy", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(response.headers.getSetCookie().join(";")).toContain("citari_access=");
   });
+
+  it("rejects state changes when Origin is missing or not the exact BFF origin", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const missing = new NextRequest("http://localhost:3000/api/backend/auth/login", { method: "POST", body: "{}", headers: { "content-type": "application/json" } });
+    const crossOrigin = request("auth/login", { method: "POST", body: "{}", headers: { origin: "https://attacker.test", "content-type": "application/json" } });
+
+    await expect(POST(missing, context(["auth", "login"]))).resolves.toMatchObject({ status: 403 });
+    await expect(POST(crossOrigin, context(["auth", "login"]))).resolves.toMatchObject({ status: 403 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

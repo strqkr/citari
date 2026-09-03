@@ -54,7 +54,7 @@ baked into the bundle **at build time**, not at runtime.
 
 ## Implemented routes
 
-- **Public**: `/`, `/track`, `/book/[slug]/*`, `/track/[code]/*`
+- **Public**: `/`, `/track`, `/book/[slug]/*`
 - **Business owner**: `/login`, `/register`, `/dashboard`, `/services`, `/service-categories`,
   `/locations`, `/availability` (weekly hours + slot generation, a single flow),
   `/bookings`, `/customers`, `/reports`, `/settings/business`

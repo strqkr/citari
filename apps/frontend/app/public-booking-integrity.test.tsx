@@ -63,12 +63,22 @@ describe("public booking integrity", () => {
     expect(await screen.findByRole("heading", { name: "Listo, Ana." })).toBeInTheDocument();
   });
 
-  it("looks up tracking through a POST body and strips the fragment", async () => {
+  it("requires an emailed code and keeps tracking credentials in POST bodies", async () => {
     history.replaceState(null, "", "/track#token=tracking-secret");
-    vi.mocked(apiPost).mockResolvedValue({ id: "booking", version: 1, status: "PENDING", startAt: "2030-01-01T10:00:00Z", endAt: "2030-01-01T10:30:00Z", serviceName: "Corte", location: { name: "Centro" }, tenant: { name: "Negocio", timezone: "UTC", locale: "es-CR" } });
+    vi.mocked(apiPost)
+      .mockResolvedValueOnce({ challengeToken: "challenge-secret", expiresAt: "2030-01-01T10:10:00Z", destination: "a**@example.com" })
+      .mockResolvedValueOnce({ accessGrant: "grant-secret", expiresAt: "2030-01-01T10:15:00Z" })
+      .mockResolvedValueOnce({ id: "booking", version: 1, status: "PENDING", startAt: "2030-01-01T10:00:00Z", endAt: "2030-01-01T10:30:00Z", serviceName: "Corte", location: { name: "Centro" }, tenant: { name: "Negocio", timezone: "UTC", locale: "es-CR" } });
+    const user = userEvent.setup();
     render(<TrackLookupPage />);
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/public/tracking/lookup", { token: "tracking-secret" }));
+    await waitFor(() => expect(screen.getByLabelText("Acceso de seguimiento")).toHaveValue("tracking-secret"));
     expect(window.location.hash).toBe("");
+    await user.click(screen.getByRole("button", { name: "Enviar código de verificación" }));
+    expect(apiPost).toHaveBeenNthCalledWith(1, "/public/tracking/verification/request", { token: "tracking-secret" });
+    await user.type(await screen.findByLabelText("Código de seis dígitos"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verificar y consultar" }));
+    await waitFor(() => expect(apiPost).toHaveBeenNthCalledWith(2, "/public/tracking/verification/confirm", { token: "tracking-secret", challengeToken: "challenge-secret", code: "123456" }));
+    expect(apiPost).toHaveBeenNthCalledWith(3, "/public/tracking/lookup", { token: "tracking-secret", accessGrant: "grant-secret" });
     expect(await screen.findByRole("heading", { name: "Detalle de tu cita" })).toBeInTheDocument();
   });
 });

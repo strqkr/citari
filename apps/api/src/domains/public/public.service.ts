@@ -134,9 +134,9 @@ export class PublicService {
       } });
       if (!hold) throw new GoneException("The slot hold expired or is invalid");
       await this.scheduling.assertAvailable(tx, { tenantId: tenant.id, tenantTimezone: tenant.timezone, location, window, excludeHoldId: hold.id });
-      const match = input.customer.email ? { email: input.customer.email } : { phone: input.customer.phone ?? "" };
+      const match = { email: input.customer.email };
       let customer = await tx.customer.findFirst({ where: { tenantId: tenant.id, ...match, anonymizedAt: null } });
-      const customerData = { firstName: input.customer.firstName, lastName: input.customer.lastName, email: input.customer.email ?? null, phone: input.customer.phone ?? null, notes: input.customer.notes ?? null, consentAt: new Date() };
+      const customerData = { firstName: input.customer.firstName, lastName: input.customer.lastName, email: input.customer.email, phone: input.customer.phone ?? null, notes: input.customer.notes ?? null, consentAt: new Date() };
       customer = customer ? await tx.customer.update({ where: { id: customer.id }, data: customerData }) : await tx.customer.create({ data: { tenantId: tenant.id, ...customerData } });
       const booking = await tx.booking.create({ data: {
         tenantId: tenant.id, customerId: customer.id, serviceId: service.id, locationId: location.id, status: "PENDING", ...window,

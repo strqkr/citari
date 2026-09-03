@@ -15,11 +15,11 @@ export const publicBookingSchema = z.object({
   customer: z.object({
     firstName: z.string().trim().min(1).max(100),
     lastName: z.string().trim().min(1).max(200),
-    email: z.email().transform((value) => value.toLowerCase()).optional(),
+    email: z.email().transform((value) => value.toLowerCase()),
     phone: z.string().trim().min(5).max(30).optional(),
     consent: z.literal(true),
     notes: z.string().trim().max(1000).optional()
-  }).refine((value) => value.email ?? value.phone, "Email or phone is required"),
+  }),
   customerNotes: z.string().trim().max(1000).optional()
 }).strict();
 

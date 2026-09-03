@@ -77,7 +77,7 @@ describe("PublicService", () => {
   });
 
   it("rejects a missing or expired hold", async () => {
-    const input = { serviceId: "s", locationId: "l", startAt, holdToken: "h".repeat(43), customer: { firstName: "A", lastName: "B", phone: "12345", consent: true as const } };
+    const input = { serviceId: "s", locationId: "l", startAt, holdToken: "h".repeat(43), customer: { firstName: "A", lastName: "B", email: "a@b.com", phone: "12345", consent: true as const } };
     tx.idempotencyKey.findUnique.mockResolvedValue({ requestHash: requestHash(input), responseBody: null, responseBodyEncrypted: null });
     tx.service.findFirst.mockResolvedValue({ id: "s", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0 });
     tx.location.findFirst.mockResolvedValue({ id: "l", timezone: "UTC", businessHours: [] });

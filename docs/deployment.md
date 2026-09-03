@@ -50,8 +50,11 @@ GitHub Actions variable for the public environment.
    both security audit events exist and that the temporary password no longer
    authenticates before removing the bootstrap credential.
 6. Deploy the API by immutable tag and wait for `/api/v1/health/ready`.
-7. Deploy the frontend and run login, catalog, availability, booking, tracking,
-   cancellation, rescheduling, and tenant-isolation smoke tests.
+7. Deploy the frontend and run login, catalog, availability and booking smoke
+   tests. For tracking, prove that the bearer alone is denied, the customer
+   receives a six-digit email code, a wrong code is denied, and the short-lived
+   grant authorizes lookup, cancellation and rescheduling without entering a
+   URL or persistent browser storage. Complete tenant-isolation checks.
 8. Observe error rate, latency, database saturation, email delivery backlog,
    permanently failed messages, `429` volume, and booking failures before
    promoting the release.

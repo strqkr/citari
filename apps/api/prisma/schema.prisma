@@ -56,6 +56,7 @@ enum AuthChallengePurpose {
 enum NotificationTemplate {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  BOOKING_ACCESS_CODE
 }
 
 model User {
@@ -85,7 +86,8 @@ model User {
 
 model EmailDelivery {
   id               String               @id @default(uuid()) @db.Uuid
-  userId           String               @db.Uuid
+  userId           String?              @db.Uuid
+  deduplicationKey String               @db.VarChar(200)
   recipient        String               @db.VarChar(254)
   template         NotificationTemplate
   payloadEncrypted String
@@ -95,10 +97,11 @@ model EmailDelivery {
   sentAt           DateTime?            @db.Timestamptz(3)
   lastError        String?              @db.VarChar(500)
   createdAt        DateTime             @default(now()) @db.Timestamptz(3)
-  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([sentAt, availableAt, lockedAt])
   @@index([userId, createdAt])
+  @@index([deduplicationKey, createdAt])
   @@map("email_deliveries")
 }
 
@@ -154,31 +157,32 @@ model Session {
 }
 
 model Tenant {
-  id                   String                @id @default(uuid()) @db.Uuid
-  name                 String                @db.VarChar(200)
-  slug                 String                @unique @db.VarChar(100)
-  status               TenantStatus          @default(PENDING_VERIFICATION)
-  timezone             String                @db.VarChar(64)
-  locale               String                @default("es-CR") @db.VarChar(16)
-  currency             String                @default("CRC") @db.Char(3)
-  description          String?
-  logoUrl              String?               @db.VarChar(1024)
-  publicMessage        String?               @db.VarChar(500)
-  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
-  updatedAt            DateTime              @updatedAt @db.Timestamptz(3)
-  memberships          TenantMembership[]
-  sessions             Session[]
-  contacts             TenantContact[]
-  categories           ServiceCategory[]
-  services             Service[]
-  locations            Location[]
-  availabilityBlocks   AvailabilityBlock[]
-  customers            Customer[]
-  bookings             Booking[]
-  slotHolds            SlotHold[]
-  bookingConfirmations BookingConfirmation[]
-  auditEvents          AuditEvent[]
-  idempotencyKeys      IdempotencyKey[]
+  id                      String                   @id @default(uuid()) @db.Uuid
+  name                    String                   @db.VarChar(200)
+  slug                    String                   @unique @db.VarChar(100)
+  status                  TenantStatus             @default(PENDING_VERIFICATION)
+  timezone                String                   @db.VarChar(64)
+  locale                  String                   @default("es-CR") @db.VarChar(16)
+  currency                String                   @default("CRC") @db.Char(3)
+  description             String?
+  logoUrl                 String?                  @db.VarChar(1024)
+  publicMessage           String?                  @db.VarChar(500)
+  createdAt               DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime                 @updatedAt @db.Timestamptz(3)
+  memberships             TenantMembership[]
+  sessions                Session[]
+  contacts                TenantContact[]
+  categories              ServiceCategory[]
+  services                Service[]
+  locations               Location[]
+  availabilityBlocks      AvailabilityBlock[]
+  customers               Customer[]
+  bookings                Booking[]
+  slotHolds               SlotHold[]
+  bookingConfirmations    BookingConfirmation[]
+  bookingAccessChallenges BookingAccessChallenge[]
+  auditEvents             AuditEvent[]
+  idempotencyKeys         IdempotencyKey[]
 
   @@index([status])
   @@map("tenants")
@@ -333,34 +337,35 @@ model Customer {
 }
 
 model Booking {
-  id                         String                 @id @default(uuid()) @db.Uuid
-  tenantId                   String                 @db.Uuid
-  customerId                 String                 @db.Uuid
-  serviceId                  String                 @db.Uuid
-  locationId                 String                 @db.Uuid
-  status                     BookingStatus          @default(PENDING)
-  startAt                    DateTime               @db.Timestamptz(3)
-  endAt                      DateTime               @db.Timestamptz(3)
-  occupiedStartAt            DateTime               @db.Timestamptz(3)
-  occupiedEndAt              DateTime               @db.Timestamptz(3)
-  holdExpiresAt              DateTime?              @db.Timestamptz(3)
-  serviceName                String                 @db.VarChar(200)
+  id                         String                   @id @default(uuid()) @db.Uuid
+  tenantId                   String                   @db.Uuid
+  customerId                 String                   @db.Uuid
+  serviceId                  String                   @db.Uuid
+  locationId                 String                   @db.Uuid
+  status                     BookingStatus            @default(PENDING)
+  startAt                    DateTime                 @db.Timestamptz(3)
+  endAt                      DateTime                 @db.Timestamptz(3)
+  occupiedStartAt            DateTime                 @db.Timestamptz(3)
+  occupiedEndAt              DateTime                 @db.Timestamptz(3)
+  holdExpiresAt              DateTime?                @db.Timestamptz(3)
+  serviceName                String                   @db.VarChar(200)
   serviceDurationMinutes     Int
-  serviceBufferBeforeMinutes Int                    @default(0)
-  serviceBufferAfterMinutes  Int                    @default(0)
-  servicePrice               Decimal?               @db.Decimal(12, 2)
-  currency                   String                 @db.Char(3)
-  customerNotes              String?                @db.VarChar(1000)
-  internalNotes              String?                @db.VarChar(1000)
-  version                    Int                    @default(1)
-  createdAt                  DateTime               @default(now()) @db.Timestamptz(3)
-  updatedAt                  DateTime               @updatedAt @db.Timestamptz(3)
-  tenant                     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  customer                   Customer               @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
-  service                    Service                @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: Restrict)
-  location                   Location               @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
+  serviceBufferBeforeMinutes Int                      @default(0)
+  serviceBufferAfterMinutes  Int                      @default(0)
+  servicePrice               Decimal?                 @db.Decimal(12, 2)
+  currency                   String                   @db.Char(3)
+  customerNotes              String?                  @db.VarChar(1000)
+  internalNotes              String?                  @db.VarChar(1000)
+  version                    Int                      @default(1)
+  createdAt                  DateTime                 @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime                 @updatedAt @db.Timestamptz(3)
+  tenant                     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer                   Customer                 @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  service                    Service                  @relation(fields: [tenantId, serviceId], references: [tenantId, id], onDelete: Restrict)
+  location                   Location                 @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict)
   publicTokens               BookingPublicToken[]
   confirmations              BookingConfirmation[]
+  accessChallenges           BookingAccessChallenge[]
   statusHistory              BookingStatusHistory[]
 
   @@unique([tenantId, id])
@@ -435,6 +440,27 @@ model BookingConfirmation {
 
   @@index([tenantId, expiresAt, consumedAt])
   @@map("booking_confirmations")
+}
+
+model BookingAccessChallenge {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  bookingId      String    @db.Uuid
+  tokenHash      String    @unique @db.Char(64)
+  codeHash       String    @db.Char(64)
+  attempts       Int       @default(0)
+  grantHash      String?   @unique @db.Char(64)
+  grantEncrypted String?
+  expiresAt      DateTime  @db.Timestamptz(3)
+  grantExpiresAt DateTime? @db.Timestamptz(3)
+  consumedAt     DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking        Booking   @relation(fields: [tenantId, bookingId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId, expiresAt])
+  @@index([tenantId, grantExpiresAt])
+  @@map("booking_access_challenges")
 }
 
 model IdempotencyKey {
