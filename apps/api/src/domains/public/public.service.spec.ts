@@ -9,6 +9,8 @@ const key = "n".repeat(32);
 const env = { NOTIFICATION_ENCRYPTION_KEY: key };
 const startAt = new Date("2030-01-01T10:00:00Z");
 const window = { startAt, endAt: new Date("2030-01-01T10:30:00Z"), occupiedStartAt: startAt, occupiedEndAt: new Date("2030-01-01T10:30:00Z") };
+const policy = { minimumLeadMinutes: 60, maximumAdvanceDays: 365, cancellationNoticeMinutes: 30, rescheduleNoticeMinutes: 60, slotIntervalMinutes: 15 };
+const holdPolicy = { serviceMinimumLeadMinutes: 60, serviceMaximumAdvanceDays: 365, cancellationNoticeMinutes: 30, rescheduleNoticeMinutes: 60, slotIntervalMinutes: 15 };
 const requestHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 describe("PublicService", () => {
@@ -34,7 +36,7 @@ describe("PublicService", () => {
       $executeRaw: vi.fn().mockResolvedValue(1)
     };
     prisma = { tenant: { findFirst: vi.fn().mockResolvedValue(tenant) }, withTenant: vi.fn((_tenantId: string, operation: (client: typeof tx) => unknown) => operation(tx)) };
-    scheduling = { window: vi.fn().mockReturnValue(window), lockLocation: vi.fn(), assertAvailable: vi.fn(), assertBusinessHours: vi.fn() };
+    scheduling = { window: vi.fn().mockReturnValue(window), lockLocation: vi.fn(), assertAvailable: vi.fn(), assertBusinessHours: vi.fn(), assertPolicy: vi.fn(), firstAlignedSlot: vi.fn((value) => value), availableSlots: vi.fn().mockReturnValue([]) };
     service = new PublicService(prisma, scheduling, env as never);
   });
 
@@ -47,13 +49,14 @@ describe("PublicService", () => {
   it("acquires an expiring hold and stores only its digest", async () => {
     const input = { serviceId: "s", locationId: "l", startAt };
     tx.idempotencyKey.findUnique.mockResolvedValue({ requestHash: requestHash(input), responseBody: null, responseBodyEncrypted: null });
-    tx.service.findFirst.mockResolvedValue({ id: "s", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0 });
+    tx.service.findFirst.mockResolvedValue({ id: "s", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, ...policy });
     tx.location.findFirst.mockResolvedValue({ id: "l", timezone: "UTC", businessHours: [] });
     const result = await service.createHold("shop", input, "hold-idempotency-key");
     const stored = tx.slotHold.create.mock.calls[0][0].data;
     expect(result.holdToken).toHaveLength(43);
     expect(stored.tokenHash).toMatch(/^[a-f0-9]{64}$/);
     expect(stored.tokenHash).not.toBe(result.holdToken);
+    expect(stored).toMatchObject(holdPolicy);
     expect(scheduling.lockLocation).toHaveBeenCalled();
     expect(tx.idempotencyKey.update.mock.calls[0][0].data.responseBodyEncrypted).not.toContain(result.holdToken);
   });
@@ -61,9 +64,9 @@ describe("PublicService", () => {
   it("consumes a matching hold and returns only a one-use confirmation nonce", async () => {
     const input = { serviceId: "s", locationId: "l", startAt, holdToken: "h".repeat(43), customer: { firstName: "A", lastName: "B", email: "a@b.com", consent: true as const } };
     tx.idempotencyKey.findUnique.mockResolvedValue({ requestHash: requestHash(input), responseBody: null, responseBodyEncrypted: null });
-    tx.service.findFirst.mockResolvedValue({ id: "s", name: "Care", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, price: null, currency: "CRC" });
+    tx.service.findFirst.mockResolvedValue({ id: "s", name: "Care", durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, price: null, currency: "CRC", ...policy });
     tx.location.findFirst.mockResolvedValue({ id: "l", timezone: "UTC", businessHours: [] });
-    tx.slotHold.findFirst.mockResolvedValue({ id: "hold" });
+    tx.slotHold.findFirst.mockResolvedValue({ id: "hold", ...holdPolicy });
     tx.slotHold.updateMany.mockResolvedValue({ count: 1 });
     tx.customer.findFirst.mockResolvedValue(null);
     tx.customer.create.mockResolvedValue({ id: "customer" });
@@ -74,6 +77,7 @@ describe("PublicService", () => {
     expect(tx.bookingPublicToken.create.mock.calls[0][0].data.tokenHash).toMatch(/^[a-f0-9]{64}$/);
     expect(tx.bookingConfirmation.create.mock.calls[0][0].data.payloadEncrypted).not.toContain(tenant.id);
     expect(tx.slotHold.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "CONSUMED" } }));
+    expect(tx.booking.create).toHaveBeenCalledWith({ data: expect.objectContaining(holdPolicy) });
   });
 
   it("rejects a missing or expired hold", async () => {

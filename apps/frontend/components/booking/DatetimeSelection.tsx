@@ -9,7 +9,13 @@ import { endpoints } from "@/lib/endpoints";
 
 type HoldResponse = { holdToken: string; expiresAt: string };
 
-export function DatetimeSelection({ slug, slots }: { slug: string; slots: string[] }) {
+function dateKey(value: string, timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(value));
+  const part = (type: "year" | "month" | "day") => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function DatetimeSelection({ slug, slots, timezone }: { slug: string; slots: string[]; timezone: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const serviceId = params.get("service") ?? "";
@@ -18,7 +24,7 @@ export function DatetimeSelection({ slug, slots }: { slug: string; slots: string
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const attempt = useRef<{ slot: string; key: string } | null>(null);
-  const grouped = useMemo(() => slots.reduce<Record<string, string[]>>((result, slot) => { const day = slot.slice(0, 10); (result[day] ??= []).push(slot); return result; }, {}), [slots]);
+  const grouped = useMemo(() => slots.reduce<Record<string, string[]>>((result, slot) => { const day = dateKey(slot, timezone); (result[day] ??= []).push(slot); return result; }, {}), [slots, timezone]);
 
   function select(slot: string) {
     setSelected(slot);
@@ -49,7 +55,7 @@ export function DatetimeSelection({ slug, slots }: { slug: string; slots: string
   return <div>
     <h1 className="font-serif text-3xl font-medium tracking-tight">Escoge fecha y hora</h1>
     <p className="mt-2 text-muted-foreground">Al continuar, reservaremos el horario durante 10 minutos mientras completas tus datos.</p>
-    {slots.length === 0 ? <div className="mt-6 rounded-xl border p-6 text-center text-sm text-muted-foreground">No hay horarios disponibles para esta sede.</div> : <div className="mt-6 space-y-5">{Object.entries(grouped).map(([day, daySlots]) => <section key={day}><h2 className="mb-2 font-medium capitalize">{new Date(`${day}T12:00:00`).toLocaleDateString("es-CR", { weekday: "long", day: "numeric", month: "long" })}</h2><div className="grid grid-cols-3 gap-2 sm:grid-cols-5">{daySlots.map((slot) => <button key={slot} type="button" aria-pressed={selected === slot} onClick={() => select(slot)} className={`min-h-11 rounded-md border text-sm ${selected === slot ? "border-ink bg-ink text-ink-foreground" : "bg-card"}`}>{new Date(slot).toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}</button>)}</div></section>)}</div>}
+    {slots.length === 0 ? <div className="mt-6 rounded-xl border p-6 text-center text-sm text-muted-foreground">No hay horarios disponibles para esta sede.</div> : <div className="mt-6 space-y-5">{Object.entries(grouped).map(([day, daySlots]) => <section key={day}><h2 className="mb-2 font-medium capitalize">{new Intl.DateTimeFormat("es-CR", { timeZone: timezone, weekday: "long", day: "numeric", month: "long" }).format(new Date(daySlots[0]))}</h2><div className="grid grid-cols-3 gap-2 sm:grid-cols-5">{daySlots.map((slot) => <button key={slot} type="button" aria-pressed={selected === slot} onClick={() => select(slot)} className={`min-h-11 rounded-md border text-sm ${selected === slot ? "border-ink bg-ink text-ink-foreground" : "bg-card"}`}>{new Intl.DateTimeFormat("es-CR", { timeZone: timezone, hour: "2-digit", minute: "2-digit", timeZoneName: "shortOffset" }).format(new Date(slot))}</button>)}</div></section>)}</div>}
     {error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : null}
     <div className="mt-8 flex justify-between"><Link href={`/book/${slug}/service`} className={buttonVariants({ variant: "outline" })}>Volver</Link><Button type="button" disabled={!selected || loading} onClick={continueToCustomer}>{loading ? "Reteniendo..." : selected ? "Continuar" : "Selecciona un horario"}</Button></div>
   </div>;

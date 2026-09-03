@@ -6,6 +6,7 @@ import { PrismaService, type TransactionClient } from "../database/prisma.servic
 import { BookingStatus } from "../generated/prisma/enums.js";
 import { NotificationOutboxService } from "../notifications/notification-outbox.service.js";
 import { SchedulingIntegrityService } from "../scheduling/scheduling-integrity.service.js";
+import { customerMutationViolation } from "./booking-state-machine.js";
 
 const hash = (token: string): string => createHash("sha256").update(token).digest("hex");
 const CHALLENGE_TTL_MS = 10 * 60_000;
@@ -19,8 +20,6 @@ const tokenTenant = (token: string): string => {
   }
   return tenantId;
 };
-const PUBLIC_MUTABLE: BookingStatus[] = [BookingStatus.HELD, BookingStatus.PENDING, BookingStatus.CONFIRMED];
-
 @Injectable()
 export class TrackingService {
   constructor(
@@ -130,7 +129,9 @@ export class TrackingService {
   async cancel(token: string, accessGrant: string, version: number, reason?: string) {
     return this.withAuthorizedToken(token, accessGrant, async (tx, tenantId, bookingId) => {
       const booking = await tx.booking.findFirst({ where: { tenantId, id: bookingId } });
-      if (!booking || !PUBLIC_MUTABLE.includes(booking.status)) throw new UnprocessableEntityException("Booking cannot be cancelled");
+      if (!booking) throw new UnprocessableEntityException("Booking cannot be cancelled");
+      const violation = customerMutationViolation(booking.status, booking.startAt, booking.cancellationNoticeMinutes, "cancel");
+      if (violation) throw new UnprocessableEntityException(violation);
       const changed = await tx.booking.updateMany({ where: { tenantId, id: bookingId, version, status: booking.status }, data: { status: BookingStatus.CANCELLED, version: { increment: 1 } } });
       if (changed.count !== 1) throw new ConflictException("Booking was changed by another request");
       await this.record(tx, tenantId, bookingId, booking.status, BookingStatus.CANCELLED, reason);
@@ -141,13 +142,16 @@ export class TrackingService {
   async reschedule(token: string, accessGrant: string, version: number, rawStart: string, reason?: string) {
     return this.withAuthorizedToken(token, accessGrant, async (tx, tenantId, bookingId) => {
       const booking = await tx.booking.findFirst({ where: { tenantId, id: bookingId } });
-      if (!booking || !PUBLIC_MUTABLE.includes(booking.status)) throw new UnprocessableEntityException("Booking cannot be rescheduled");
+      if (!booking) throw new UnprocessableEntityException("Booking cannot be rescheduled");
+      const now = new Date();
+      const violation = customerMutationViolation(booking.status, booking.startAt, booking.rescheduleNoticeMinutes, "reschedule", now);
+      if (violation) throw new UnprocessableEntityException(violation);
       const location = await tx.location.findFirst({ where: { tenantId, id: booking.locationId, isActive: true }, include: { businessHours: true, tenant: { select: { timezone: true } } } });
       if (!location) throw new ConflictException("The requested time is no longer available");
       const window = this.scheduling.window({ durationMinutes: booking.serviceDurationMinutes, bufferBeforeMinutes: booking.serviceBufferBeforeMinutes, bufferAfterMinutes: booking.serviceBufferAfterMinutes }, new Date(rawStart));
-      if (window.startAt <= new Date()) throw new UnprocessableEntityException("Booking start must be in the future");
+      this.scheduling.assertPolicy({ minimumLeadMinutes: booking.serviceMinimumLeadMinutes, maximumAdvanceDays: booking.serviceMaximumAdvanceDays, slotIntervalMinutes: booking.slotIntervalMinutes }, window.startAt, location.timezone ?? location.tenant.timezone, now);
       await this.scheduling.lockLocation(tx, tenantId, booking.locationId);
-      await this.scheduling.assertAvailable(tx, { tenantId, tenantTimezone: location.tenant.timezone, location, window, excludeBookingId: bookingId });
+      await this.scheduling.assertAvailable(tx, { tenantId, tenantTimezone: location.tenant.timezone, location, window, excludeBookingId: bookingId, now });
       const changed = await tx.booking.updateMany({ where: { tenantId, id: bookingId, version, status: booking.status }, data: { ...window, version: { increment: 1 } } });
       if (changed.count !== 1) throw new ConflictException("Booking was changed by another request");
       await tx.auditEvent.create({ data: { tenantId, actorUserId: null, action: "booking.public_rescheduled", entityType: "Booking", entityId: bookingId, reason: reason ?? null, metadata: { previousStartAt: booking.startAt.toISOString(), startAt: window.startAt.toISOString() } } });

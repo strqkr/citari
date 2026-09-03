@@ -31,12 +31,18 @@ describe("public booking integrity", () => {
     history.replaceState(null, "", "/book/shop/datetime?service=service-id&location=location-id");
     vi.mocked(apiPostIdempotent).mockResolvedValue({ holdToken: "hold-secret", expiresAt: "2030-01-01T10:10:00Z" });
     const user = userEvent.setup();
-    render(<DatetimeSelection slug="shop" slots={["2030-01-01T10:00:00.000Z"]} />);
+    render(<DatetimeSelection slug="shop" slots={["2030-01-01T10:00:00.000Z"]} timezone="America/Costa_Rica" />);
     await user.click(screen.getByRole("button", { pressed: false }));
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     expect(apiPostIdempotent).toHaveBeenCalledWith("/public/shop/holds", { serviceId: "service-id", locationId: "location-id", startAt: "2030-01-01T10:00:00.000Z" }, expect.any(String));
     expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/book\/shop\/customer\?[^#]+#hold=hold-secret&expires=/));
     expect(String(push.mock.calls[0]?.[0]).split("#")[0]).not.toContain("hold-secret");
+  });
+
+  it("distinguishes repeated fall-back times by their UTC offset", () => {
+    render(<DatetimeSelection slug="shop" slots={["2026-11-01T05:30:00.000Z", "2026-11-01T06:30:00.000Z"]} timezone="America/New_York" />);
+    expect(screen.getByRole("button", { name: /GMT-4/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /GMT-5/ })).toBeInTheDocument();
   });
 
   it("requires the fragment hold and redirects with only a confirmation nonce fragment", async () => {

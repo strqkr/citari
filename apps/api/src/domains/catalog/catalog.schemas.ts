@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { isValidTimezone } from "../../scheduling/scheduling-integrity.service.js";
 
 const trimmed = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+const timezone = z.string().trim().min(1).max(64).refine(isValidTimezone, "Expected a valid IANA timezone").nullable().optional();
 export const uuidSchema = z.uuid();
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
@@ -17,13 +19,16 @@ export const createServiceSchema = z.object({
   categoryId: uuidSchema, name: trimmed(200), description: z.string().trim().max(5000).nullable().optional(),
   durationMinutes: z.number().int().min(5).max(1440), bufferBeforeMinutes: z.number().int().min(0).max(1440).optional(),
   bufferAfterMinutes: z.number().int().min(0).max(1440).optional(), price: z.number().nonnegative().max(9_999_999_999.99).nullable().optional(),
+  minimumLeadMinutes: z.number().int().min(0).max(43_200).optional(), maximumAdvanceDays: z.number().int().min(1).max(730).optional(),
+  cancellationNoticeMinutes: z.number().int().min(0).max(43_200).optional(), rescheduleNoticeMinutes: z.number().int().min(0).max(43_200).optional(),
+  slotIntervalMinutes: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20), z.literal(30), z.literal(60)]).optional(),
   currency: z.string().trim().length(3).transform((value) => value.toUpperCase()), showPrice: z.boolean().optional(), isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(1_000_000).optional(),
 }).strict();
 export const updateServiceSchema = createServiceSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
 export const createLocationSchema = z.object({
-  name: trimmed(200), timezone: optionalText(64), addressLine1: optionalText(200), addressLine2: optionalText(200), province: optionalText(100),
+  name: trimmed(200), timezone, addressLine1: optionalText(200), addressLine2: optionalText(200), province: optionalText(100),
   canton: optionalText(100), district: optionalText(100), postalCode: optionalText(20), isMain: z.boolean().optional(), isActive: z.boolean().optional(),
 }).strict();
 export const updateLocationSchema = createLocationSchema.partial().refine((value) => Object.keys(value).length > 0, "At least one field is required");
