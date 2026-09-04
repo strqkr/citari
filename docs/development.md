@@ -36,13 +36,28 @@ place it in a command argument, environment file, or shell history.
 
 ## Quality gate
 
-Run `pnpm quality` before opening a pull request. It executes linting, static
-type checks, coverage-enforced tests, and production builds across every package
-that implements those scripts. CI must use the pinned pnpm version and
+Run `pnpm quality` before opening a pull request. It verifies that the committed
+OpenAPI v1 document is current, then executes linting, static type checks,
+coverage-enforced tests, and production builds across every package that
+implements those scripts. CI must use the pinned pnpm version and
 `pnpm install --frozen-lockfile`.
+
+Run `pnpm test:e2e` for the Chromium golden paths. These tests start the Next.js
+development server themselves and exercise the complete privileged first-login
+and private tracking journeys at the browser boundary. Install the pinned
+browser once with `pnpm exec playwright install chromium`; CI installs Chromium
+and its operating-system dependencies on every clean runner.
+
+API changes that alter routes or schemas require `pnpm openapi:generate`. Review
+the diff in `apps/api/openapi/citari.v1.json` as a public contract change.
+`pnpm openapi:check` is read-only and fails when that reviewed artifact is stale.
 
 Package-level commands remain available through filters, for example:
 `pnpm --filter @citari/api test`.
+
+The API development command compiles with TypeScript before each restart so
+NestJS receives decorator metadata. Do not replace it with a transpile-only
+runner: dependency injection metadata is part of the runtime contract.
 
 ## Database lifecycle
 

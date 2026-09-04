@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "start:dev": "tsx watch src/main.ts",
+    "start:dev": "tsc-watch -p tsconfig.build.json --onSuccess \"node --enable-source-maps dist/main.js\"",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:integration": "tsc -p tsconfig.integration.json && node dist-integration/test/integration/postgres-http.js",
@@ -17,6 +17,8 @@
     "db:generate": "prisma generate",
     "db:migrate:deploy": "prisma migrate deploy",
     "admin:bootstrap": "tsx src/cli/bootstrap-superadmin.ts",
+    "openapi:generate": "tsc -p tsconfig.build.json && node dist/cli/openapi-contract.js",
+    "openapi:check": "tsc -p tsconfig.build.json && node dist/cli/openapi-contract.js --check",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -52,6 +54,7 @@
     "eslint": "9.39.5",
     "prisma": "7.10.0",
     "supertest": "7.2.2",
+    "tsc-watch": "7.2.1",
     "tsx": "4.20.5",
     "typescript": "5.9.2",
     "typescript-eslint": "8.69.0",

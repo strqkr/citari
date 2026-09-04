@@ -14,17 +14,21 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:coverage": "pnpm -r --if-present test:coverage",
-    "quality": "cross-env DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build?schema=public pnpm db:generate && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
+    "test:e2e": "playwright test",
+    "quality": "cross-env DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build?schema=public JWT_ISSUER=https://build.citari.test JWT_AUDIENCE=citari-build JWT_SECRET=build-jwt-secret-with-at-least-32-bytes MFA_ENCRYPTION_KEY=build-mfa-secret-with-at-least-32-bytes NOTIFICATION_ENCRYPTION_KEY=build-notification-secret-with-32-bytes APP_PUBLIC_URL=https://build.citari.test pnpm db:generate && pnpm openapi:check && pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "db:format": "pnpm --filter @citari/api db:format",
     "db:validate": "pnpm --filter @citari/api db:validate",
     "db:generate": "pnpm --filter @citari/api db:generate",
     "db:migrate:deploy": "pnpm --filter @citari/api db:migrate:deploy",
     "admin:bootstrap": "pnpm --filter @citari/api admin:bootstrap",
+    "openapi:generate": "pnpm --filter @citari/api openapi:generate",
+    "openapi:check": "pnpm --filter @citari/api openapi:check",
     "infra:up": "docker compose up -d --wait postgres",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f postgres"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "cross-env": "10.1.0"
   }
 }
