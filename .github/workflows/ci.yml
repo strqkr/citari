@@ -20,6 +20,12 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm quality
+      - name: Publish reviewed API contract
+        uses: actions/upload-artifact@v4
+        with:
+          name: citari-openapi-v1
+          path: apps/api/openapi/citari.v1.json
+          if-no-files-found: error
 
   postgres:
     name: PostgreSQL migration and bootstrap
@@ -66,10 +72,23 @@ jobs:
       - name: Run real HTTP and tenant-isolation smoke test
         run: pnpm --filter @citari/api test:integration
 
+  browser:
+    name: Playwright golden paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
   images:
     name: Production Docker images
     runs-on: ubuntu-latest
-    needs: [quality, postgres]
+    needs: [quality, postgres, browser]
     strategy:
       matrix:
         include:

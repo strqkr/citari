@@ -26,10 +26,12 @@ and MFA enrollment, and creates no tenant or business data.
 
 ## Quality and delivery
 
-`pnpm quality` is the required local and CI gate. It runs lint, TypeScript
-checks, coverage-enforced tests, and production builds. Pull requests also
-apply all Prisma migrations to an empty PostgreSQL 17 database, prove bootstrap
-idempotency, and build both production Docker images.
+`pnpm quality` is the required local and CI gate. It checks the committed
+OpenAPI v1 contract, lint, TypeScript, coverage-enforced tests, and production
+builds. `pnpm test:e2e` runs the Chromium golden paths. Pull requests also apply
+all Prisma migrations to an empty PostgreSQL 17 database, prove bootstrap
+idempotency, publish the reviewed API contract, and build both production Docker
+images only after every preceding gate succeeds.
 
 See `docs/development.md`, `docs/deployment.md`, and
 `docs/postgresql-migration-runbook.md` for operating procedures and
